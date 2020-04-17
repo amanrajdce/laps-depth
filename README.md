@@ -1,2 +1,2 @@
-# pba-signet
-Merger of PBA and SIGNet
+# PBA-SIGNet
+Merger code of PBA and SIGNet.
