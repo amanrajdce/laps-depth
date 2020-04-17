@@ -204,11 +204,13 @@ def get_lr(curr_epoch, hparams, train_size, iteration=None):
 
     if hparams.lr_decay == "step":
         lr = step_lr(hparams.lr, curr_epoch)
-    else:
+    elif hparams.lr_decay == "cosine":
         lr = cosine_lr(
             hparams.lr, curr_epoch, iteration, batches_per_epoch, hparams.num_epochs
         )
         tf.logging.log_first_n(tf.logging.WARN, 'Default to cosine learning rate.', 1)
+    else:
+        raise ValueError("Unknown  lr decay policy!!")
 
     return lr
 

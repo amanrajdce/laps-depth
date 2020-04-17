@@ -51,7 +51,7 @@ class ModelTrainer(object):
         np.random.seed()  # Put the random seed back to random
         # Loading gt data and files for test set
         self.test_files = self.read_test_files(self.hparams.kitti_root)
-        self.gt_depths = self.setup_evaluation(self.hparams.use_gt_interp)
+        self.gt_depths = self.setup_evaluation(self.hparams.gt_path)
 
         # extra stuff for ray
         self._build_models()
@@ -64,7 +64,7 @@ class ModelTrainer(object):
         :param dataset_dir: root path of kitti dataset
         :return: read test files with kitti root path added as prefix
         """
-        with open(self.hparams.test_file, 'r') as f:
+        with open(self.hparams.test_file_path, 'r') as f:
             test_files = f.readlines()
             test_files = [os.path.join(dataset_dir, t) for t in test_files]
 
@@ -156,29 +156,23 @@ class ModelTrainer(object):
         eval_preds = self.eval_child_model(self.meval)
         return eval_preds
 
-    def setup_evaluation(self, use_interp=False):
+    def setup_evaluation(self, gt_path):
         """
         Read ground truth depth information for test set
-        :param use_interp: If enabled uses interpolated dense gt depth for evaluation
-        :return: gt depth data for test set
+        :param gt_path: path to .npy file containing gt depth
+        :return: gt depth data for test set in numpy array form
         """
-        # self.gt_path: /path/to/gt_depth.npy
-        # self.gt_interp_path: /path/to/gt_interp_depth.npy
+        # self.gt_path: /path/to/gt_depth.npy or /path/to/gt_interp_depth.npy
 
-        loaded_gt_depths = np.load(self.gt_path)
-        loaded_gt_interps = np.load(self.gt_interp_path)
-
+        loaded_gt_depths = np.load(gt_path)
         num_test = len(loaded_gt_depths)
         gt_depths = []
-        gt_interps = []
 
         for t_id in range(num_test):
             depth = loaded_gt_depths[t_id]
-            interp = loaded_gt_interps[t_id]
             gt_depths.append(depth.astype(np.float32))
-            gt_interps.append(interp.astype(np.float32))
 
-        return gt_interps if use_interp else gt_depths
+        return gt_depths
 
     def run_evaluation(self, pred_depths):
         results = helper_utils.run_evaluation(

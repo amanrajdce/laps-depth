@@ -40,36 +40,34 @@ def main(_):
         train_spec["restore"] = FLAGS.restore
 
     def explore(config):
-        """Custom explore function.
+        """
+        Custom explore function based on cifar10 from PBA paper
 
-    Args:
-      config: dictionary containing ray config params.
+        Args:
+            config: dictionary containing ray config params.
 
-    Returns:
-      Copy of config with modified augmentation policy.
-    """
+        Returns:
+        Copy of config with modified augmentation policy.
+        """
         new_params = []
-        if config["explore"] == "cifar10":
-            for i, param in enumerate(config["hp_policy"]):
-                if random.random() < 0.2:
-                    if i % 2 == 0:
-                        new_params.append(random.randint(0, 10))
-                    else:
-                        new_params.append(random.randint(0, 9))
+
+        for i, param in enumerate(config["hp_policy"]):
+            if random.random() < 0.2:
+                if i % 2 == 0:
+                    new_params.append(random.randint(0, 10))
                 else:
-                    amt = np.random.choice(
-                        [0, 1, 2, 3], p=[0.25, 0.25, 0.25, 0.25])
-                    # Cast np.int64 to int for py3 json
-                    amt = int(amt)
-                    if random.random() < 0.5:
-                        new_params.append(max(0, param - amt))
+                    new_params.append(random.randint(0, 9))
+            else:
+                amt = np.random.choice([0, 1, 2, 3], p=[0.25, 0.25, 0.25, 0.25])
+                # Cast np.int64 to int for py3 json
+                amt = int(amt)
+                if random.random() < 0.5:
+                    new_params.append(max(0, param - amt))
+                else:
+                    if i % 2 == 0:
+                        new_params.append(min(10, param + amt))
                     else:
-                        if i % 2 == 0:
-                            new_params.append(min(10, param + amt))
-                        else:
-                            new_params.append(min(9, param + amt))
-        else:
-            raise ValueError()
+                        new_params.append(min(9, param + amt))
         config["hp_policy"] = new_params
         return config
 
@@ -77,7 +75,7 @@ def main(_):
 
     pbt = PopulationBasedTraining(
         time_attr="training_iteration",
-        reward_attr="val_acc",
+        reward_attr="abs_rel",
         perturbation_interval=FLAGS.perturbation_interval,
         custom_explore_fn=explore,
         log_config=True)

@@ -64,7 +64,7 @@ class RayModel(Trainable):
 
 def main(_):
     FLAGS = create_parser("train")  # pylint: disable=invalid-name # TODO
-    hparams = create_hparams("train", FLAGS) # TODO
+    hparams = create_hparams("train", FLAGS)  # TODO
 
     train_spec = {
         "run": RayModel,

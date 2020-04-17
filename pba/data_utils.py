@@ -87,12 +87,10 @@ class ImageFolderKITTI(data.Dataset):
         subfolders = [x.split(' ')[0] for x in frames]
         frame_ids = [x.split(' ')[1][:-1] for x in frames]
         image_file_list = [
-            os.path.join(self.data_root, subfolders[i],
-                         frame_ids[i] + '.png') for i in range(len(frames))
+            os.path.join(self.data_root, subfolders[i], frame_ids[i] + '.png') for i in range(len(frames))
         ]
         cam_file_list = [
-            os.path.join(self.data_root, subfolders[i],
-                         frame_ids[i] + '_cam.txt') for i in range(len(frames))
+            os.path.join(self.data_root, subfolders[i], frame_ids[i] + '_cam.txt') for i in range(len(frames))
         ]
 
         all_list = {'image_file_list': image_file_list, 'cam_file_list': cam_file_list}
@@ -128,9 +126,8 @@ def parse_policy(policy_emb, augmentation_transforms):
     policy = []
     num_xform = augmentation_transforms.NUM_HP_TRANSFORM
     xform_names = augmentation_transforms.HP_TRANSFORM_NAMES
-    assert len(policy_emb
-               ) == 2 * num_xform, 'policy was: {}, supposed to be: {}'.format(
-                   len(policy_emb), 2 * num_xform)
+    assert len(policy_emb) == 2 * num_xform, 'policy was: {}, supposed to be: {}'.format(len(policy_emb), 2 * num_xform)
+
     for i, xform in enumerate(xform_names):
         policy.append((xform, policy_emb[2 * i] / 10., policy_emb[2 * i + 1]))
     return policy
@@ -148,7 +145,6 @@ class TrainDataSet(object):
         seed = 8964
         random.seed(seed)
         self.parse_policy(hparams)
-        self.load_data(hparams)
         dataset = ImageFolderKITTI(
             self.hparams.kitti_root, self.hparams.train_file_path,
             self.hparams.input_height, self.hparams.input_width
