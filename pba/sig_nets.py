@@ -10,23 +10,29 @@ import numpy as np
 DISP_SCALING_RESNET50 = 5
 DISP_SCALING_VGG = 10
 
+# TODO acquire global opt configuration
+gopt = None
 
 def disp_net(opt, dispnet_inputs, bn_params):
+    # TODO manually take control of batch_norm is_training flag
+    global gopt
+    gopt = opt
+
     var_scope = "depth_net"
     if opt.dispnet_encoder == 'vgg':
-        return build_vgg(dispnet_inputs, get_disp_vgg, bn_params, opt.enable_batch_norm)
+        return build_vgg(dispnet_inputs, get_disp_vgg, bn_params, var_scope)
     else:
-        return build_resnet50(dispnet_inputs, get_disp_resnet50, bn_params, var_scope, opt.enable_batch_norm)
+        return build_resnet50(dispnet_inputs, get_disp_resnet50, bn_params, var_scope)
 
 
-def build_vgg(inputs, get_pred, bn_params, var_scope, enable_bn=False):
+def build_vgg(inputs, get_pred, bn_params, var_scope):
     H = inputs.get_shape()[1].value
     W = inputs.get_shape()[2].value
     with tf.variable_scope(var_scope) as sc:
         with slim.arg_scope(
                 [slim.conv2d, slim.conv2d_transpose],
-                normalizer_fn=slim.batch_norm if enable_bn else None,
-                normalizer_params=bn_params if enable_bn else None,
+                normalizer_fn=slim.batch_norm if gopt.enable_batch_norm else None,
+                normalizer_params=bn_params if gopt.enable_batch_norm else None,
                 weights_regularizer=slim.l2_regularizer(0.0001),
                 activation_fn=tf.nn.relu
         ):
@@ -89,12 +95,12 @@ def build_vgg(inputs, get_pred, bn_params, var_scope, enable_bn=False):
             return [pred1, pred2, pred3, pred4]
 
 
-def build_resnet50(inputs, get_pred, bn_params, var_scope, enable_bn=False):
+def build_resnet50(inputs, get_pred, bn_params, var_scope):
     with tf.variable_scope(var_scope) as sc:
         with slim.arg_scope(
                 [slim.conv2d, slim.conv2d_transpose],
-                normalizer_fn=slim.batch_norm if enable_bn else None,
-                normalizer_params=bn_params if enable_bn else None,
+                normalizer_fn=slim.batch_norm if gopt.enable_batch_norm else None,
+                normalizer_params=bn_params if gopt.enable_batch_norm else None,
                 weights_regularizer=slim.l2_regularizer(0.0001),
                 activation_fn=tf.nn.relu
         ):
@@ -160,6 +166,10 @@ def get_disp_resnet50(x):
 
 
 def pose_net(opt, posenet_inputs, bn_params):
+    # TODO manually take control of batch_norm is_training flag
+    global gopt
+    gopt = opt
+
     var_scope = "pose_net"
     with tf.variable_scope(var_scope) as sc:
         with slim.arg_scope(
@@ -176,8 +186,7 @@ def pose_net(opt, posenet_inputs, bn_params):
             conv5  = slim.conv2d(conv4, 256, 3, 2)
             conv6  = slim.conv2d(conv5, 256, 3, 2)
             conv7  = slim.conv2d(conv6, 256, 3, 2)
-            pose_pred = slim.conv2d(conv7, 6*opt.num_source, 1, 1,
-                                    normalizer_fn=None, activation_fn=None)
+            pose_pred = slim.conv2d(conv7, 6*opt.num_source, 1, 1, normalizer_fn=None, activation_fn=None)
             pose_avg = tf.reduce_mean(pose_pred, [1, 2])
             pose_final = 0.01 * tf.reshape(pose_avg, [-1, opt.num_source, 6])
 
@@ -185,7 +194,8 @@ def pose_net(opt, posenet_inputs, bn_params):
 
 
 # TODO changed
-def conv(x, num_out_layers, kernel_size, stride, activation_fn=tf.nn.relu, normalizer_fn=slim.batch_norm):
+def conv(
+        x, num_out_layers, kernel_size, stride, activation_fn=tf.nn.relu, normalizer_fn=slim.batch_norm):
     p = np.floor((kernel_size - 1) / 2).astype(np.int32)
     p_x = tf.pad(x, [[0, 0], [p, p], [p, p], [0, 0]])
     normalizer_fn = normalizer_fn if gopt.enable_batch_norm else None

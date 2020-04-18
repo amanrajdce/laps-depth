@@ -210,13 +210,13 @@ class TrainDataSet(object):
                 self.policy.extend(parse_policy(raw_policy[split:], self.augmentation_transforms))
                 tf.logging.info('using HP Policy, policy: {}'.format(self.policy))
         else:
-            # use autoaument policies modified for KITTI
+            # use autoaugment policies modified for KITTI
             self.augmentation_transforms = augmentation_transforms_autoaug
             tf.logging.info('using ENAS Policy or no augmentaton policy')
             if hparams.policy_dataset == 'svhn':
                 self.good_policies = found_policies.good_policies_svhn()
             else:
-                # use cifar good policies
+                # use cifar10 good policies
                 self.good_policies = found_policies.good_policies_cifar()
 
     def reset_policy(self, new_hparams):
@@ -248,7 +248,7 @@ class TrainDataSet(object):
             src_img_1 = src_img_1_batch[idx]
             src_img_2 = src_img_2_batch[idx]
             intrinsic = intrinsic_batch[idx]
-            if not self.hparams.no_aug:
+            if not self.hparams.no_aug_policy:
                 if not self.hparams.use_hp_policy:
                     # apply autoaugment policy here modified for KITTI
                     epoch_policy = self.good_policies[np.random.choice(len(self.good_policies))]
@@ -257,7 +257,7 @@ class TrainDataSet(object):
                         image_size=(self.input_height, self.input_width)
                     )
                 else:
-                    # apply PBA policy modified for kITTI
+                    # apply PBA policy modified for KITTI
                     if isinstance(self.policy[0], list):
                         # single policy
                         if self.hparams.flatten:
@@ -281,14 +281,14 @@ class TrainDataSet(object):
                     else:
                         raise ValueError('Unknown policy.')
             else:
-                # no data augmentation
+                # no data augmentation policy
                 pass
 
             if self.hparams.use_kitti_aug:
                 # TODO implement augmentations from SIGNet
                 # random_scaling, random_cropping,  random_coloring
                 tf.logging.info("Using augmentations from SIGNet")
-                pass
+                raise NotImplementedError()
 
             tgt_img_batch_aug.append(tgt_img)
             src_img_1_batch_aug.append(src_img_1)
