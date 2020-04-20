@@ -34,16 +34,26 @@ class Model(object):
 
     def _setup_images_and_intrinsic(self, mode):
         """Sets up input placeholders for the model."""
+        ns = self.hparams.num_source
         if mode == 'train':
+            # variables used for photo loss on original images
             self.tgt_image_input = tf.placeholder(
                 tf.float32, [self.batch_size, self.input_height, self.input_width, 3]
             )
             self.src_image_stack_input = tf.placeholder(
-                tf.float32, [self.batch_size, self.input_height, self.input_width, 3*2]  # assuming two source images
+                tf.float32, [self.batch_size, self.input_height, self.input_width, 3 * ns]  # assuming two source images
             )
             self.intrinsic_input = tf.placeholder(tf.float32, [self.batch_size, 3, 3])
+
+            # variables used to fed augmented data to network
+            self.tgt_image_input_aug = tf.placeholder(
+                tf.float32, [self.batch_size, self.input_height, self.input_width, 3]
+            )
+            self.src_image_stack_input_aug = tf.placeholder(
+                tf.float32, [self.batch_size, self.input_height, self.input_width, 3 * ns]  # assuming two source images
+            )
         else:
-            self.tgt_image_input = tf.placeholder(
+            self.tgt_image_input_aug = tf.placeholder(
                 tf.float32, [None, self.input_height, self.input_width, 3]
             )
 
@@ -74,13 +84,17 @@ class Model(object):
 
     def build_model(self):
         opt = self.hparams
-        self.tgt_image = self.preprocess_image(self.tgt_image_input)
-        self.tgt_image_pyramid = self.scale_pyramid(self.tgt_image, opt.num_scales)
-        self.tgt_image_tile_pyramid = [tf.tile(img, [opt.num_source, 1, 1, 1]) for img in self.tgt_image_pyramid]
+        self.tgt_image_aug = self.preprocess_image(self.tgt_image_input_aug)  # will be fed to network
 
         if self.mode == "train":
             tf.logging.info("Building train model")
+            self.tgt_image = self.preprocess_image(self.tgt_image_input)  # will be used for loss computation only
+            self.tgt_image_pyramid = self.scale_pyramid(self.tgt_image, opt.num_scales)
+            self.tgt_image_tile_pyramid = [tf.tile(img, [opt.num_source, 1, 1, 1]) for img in self.tgt_image_pyramid]
+
             # building model in train mode
+            self.src_image_stack_aug = self.preprocess_image(self.src_image_stack_input_aug)  # will be fed to network
+
             self.src_image_stack = self.preprocess_image(self.src_image_stack_input)
             self.src_image_concat = tf.concat(
                 [self.src_image_stack[:, :, :, 3 * i:3 * (i + 1)] for i in range(opt.num_source)], axis=0
@@ -191,13 +205,13 @@ class Model(object):
         # build dispnet_inputs
         if self.mode == 'eval':
             # for test_depth mode we only predict the depth of the target image
-            self.dispnet_inputs = self.tgt_image
+            self.dispnet_inputs = self.tgt_image_aug
         else:
             # multiple depth predictions; tgt: disp[:bs,:,:,:] src.i: disp[bs*(i+1):bs*(i+2),:,:,:]
-            self.dispnet_inputs = self.tgt_image
+            self.dispnet_inputs = self.tgt_image_aug
             for i in range(opt.num_source):
                 self.dispnet_inputs = tf.concat(
-                    [self.dispnet_inputs, self.src_image_stack[:, :, :, 3 * i:3 * (i + 1)]], axis=0
+                    [self.dispnet_inputs, self.src_image_stack_aug[:, :, :, 3 * i:3 * (i + 1)]], axis=0
                 )
 
         self.pred_disp = disp_net(opt, self.dispnet_inputs, self.bn_params)
@@ -217,7 +231,7 @@ class Model(object):
     def build_posenet(self):
         opt = self.hparams
         # build posenet_inputs
-        self.posenet_inputs = tf.concat([self.tgt_image, self.src_image_stack], axis=3)
+        self.posenet_inputs = tf.concat([self.tgt_image_aug, self.src_image_stack_aug], axis=3)
         pred_poses = pose_net(opt, self.posenet_inputs, self.bn_params)
         return pred_poses
 

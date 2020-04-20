@@ -31,7 +31,7 @@ from pba.augmentation_transforms import TransformFunction
 from pba.augmentation_transforms import NAME_TO_TRANSFORM # pylint: disable=unused-import
 from pba.augmentation_transforms import pil_wrap, pil_unwrap  # pylint: disable=unused-import
 from pba.augmentation_transforms import PARAMETER_MAX  # pylint: disable=unused-import
-from pba.augmentation_transforms import _posterize_impl, _crop_impl, _solarize_impl, _enhancer_impl
+from pba.augmentation_transforms import _posterize_impl, _solarize_impl, _enhancer_impl
 
 
 def apply_policy(policy, data, image_size, verbose=False):
@@ -122,6 +122,15 @@ invert = TransformT(
 blur = TransformT('Blur', lambda pil_img, level: pil_img.filter(ImageFilter.BLUR))
 smooth = TransformT('Smooth', lambda pil_img, level: pil_img.filter(ImageFilter.SMOOTH))
 posterize = TransformT('Posterize', _posterize_impl)
+
+
+def _crop_impl(pil_img, level, image_size, interpolation=Image.BILINEAR):
+    """Applies a crop to `pil_img` with the size depending on the `level`."""
+    cropped = pil_img.crop((level, level, image_size - level, image_size - level))
+    resized = cropped.resize((image_size, image_size), interpolation)
+    return resized
+
+
 crop_bilinear = TransformT('CropBilinear', _crop_impl)
 solarize = TransformT('Solarize', _solarize_impl)
 color = TransformT('Color', _enhancer_impl(ImageEnhance.Color))

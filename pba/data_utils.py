@@ -162,13 +162,18 @@ class TrainDataSet(object):
         self.epochs = 0
         seed = 8964
         random.seed(seed)
+        self.input_height = hparams.input_height
+        self.input_width = hparams.input_width
+
+        # parsing initial policy for data augmentation
         self.parse_policy(hparams)
         dataset = ImageFolderKITTI(
             self.hparams.kitti_root, self.hparams.train_file_path,
             self.hparams.input_height, self.hparams.input_width
         )
         data_loader = torch.utils.data.DataLoader(
-            dataset, batch_size=self.hparams.batch_size, shuffle=shuffle, num_workers=self.hparams.num_workers
+            dataset, batch_size=self.hparams.batch_size, shuffle=shuffle,
+            num_workers=self.hparams.num_workers, drop_last=True
         )
         self.train_size = len(dataset)
         self.paired_data = PairedData(data_loader)
@@ -182,10 +187,16 @@ class TrainDataSet(object):
         Args:
         hparams: tf.hparams object.
         """
+        if hparams.no_aug_policy:
+            tf.logging.info("no augmentation policy will be used")
+            if hparams.use_kitti_aug:
+                tf.logging.info("using augmentations from SIGNet")
+            return
+
         # Parse policy
         if hparams.use_hp_policy:
             self.augmentation_transforms = augmentation_transforms_pba
-
+            tf.logging.info('hp policy is selected')
             if isinstance(hparams.hp_policy, str) and hparams.hp_policy.endswith('.txt'):
                 if hparams.num_epochs % hparams.hp_policy_epochs != 0:
                     tf.logging.warning(
@@ -231,7 +242,7 @@ class TrainDataSet(object):
         else:
             # use autoaugment policies modified for KITTI
             self.augmentation_transforms = augmentation_transforms_autoaug
-            tf.logging.info('using ENAS Policy or no augmentaton policy')
+            tf.logging.info('using autoaument policy: {}'.format(hparams.policy_dataset))
             if hparams.policy_dataset == 'svhn':
                 self.good_policies = found_policies.good_policies_svhn()
             else:
@@ -312,7 +323,6 @@ class TrainDataSet(object):
             if self.hparams.use_kitti_aug:
                 # TODO implement augmentations from SIGNet
                 # random_scaling, random_cropping,  random_coloring
-                tf.logging.info("Using augmentations from SIGNet")
                 raise NotImplementedError()
 
             tgt_img_batch_aug.append(tgt_img)

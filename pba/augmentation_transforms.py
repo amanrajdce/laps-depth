@@ -74,7 +74,7 @@ def apply_policy(policy, data, image_size):
 
     pil_img_data = pil_unwrap(pil_img_data, image_size)
 
-    return [pil_img_data, intrinsic]
+    return pil_img_data + [intrinsic]
 
 
 def random_flip(x):
@@ -169,8 +169,6 @@ class TransformT(object):
 
 ################## Transform Functions ##################
 identity = TransformT('identity', lambda pil_img, level: pil_img)
-flip_lr = TransformT(
-    'FlipLR', lambda pil_img, level: pil_img.transpose(Image.FLIP_LEFT_RIGHT))
 
 # pylint:disable=g-long-lambda
 auto_contrast = TransformT(
@@ -194,16 +192,6 @@ def _posterize_impl(pil_img, level):
 
 
 posterize = TransformT('Posterize', _posterize_impl)
-
-
-def _crop_impl(pil_img, level, image_size, interpolation=Image.BILINEAR):
-    """Applies a crop to `pil_img` with the size depending on the `level`."""
-    cropped = pil_img.crop((level, level, image_size - level, image_size - level))
-    resized = cropped.resize((image_size, image_size), interpolation)
-    return resized
-
-
-crop_bilinear = TransformT('CropBilinear', _crop_impl)
 
 
 def _solarize_impl(pil_img, level):
@@ -246,7 +234,6 @@ ALL_TRANSFORMS = [
     auto_contrast, equalize, invert, posterize, solarize,
     color, contrast, brightness, sharpness, blur, smooth
 ]
-# TODO crop_bilinear and flip_lr
 
 NAME_TO_TRANSFORM = {t.name: t for t in ALL_TRANSFORMS}
 TRANSFORM_NAMES = NAME_TO_TRANSFORM.keys()

@@ -82,7 +82,7 @@ def eval_child_model(session, model, test_files):
 
         preds = session.run(
             model.pred_depth[0],
-            feed_dict={model.tgt_image_input: inputs}
+            feed_dict={model.tgt_image_input_aug: inputs}
         )
         for b in range(batch_size):
             idx = t + b
@@ -246,13 +246,16 @@ def run_epoch_training(session, model, data_loader, train_size, batch_aug_fn, cu
             tf.logging.info('Training {}/{}'.format(step, steps_per_epoch))
 
         tgt_img, src_img_1, src_img_2, intrinsic = batch
-        tgt_image, src_image_stack, intrinsic = batch_aug_fn(tgt_img, src_img_1, src_img_2, intrinsic, curr_epoch)
+        src_img_stack = np.concatenate((src_img_1, src_img_2), axis=-1)
+        tgt_img_aug, src_img_stack_aug, intrinsic = batch_aug_fn(tgt_img, src_img_1, src_img_2, intrinsic, curr_epoch)
 
         _, step, preds = session.run(
             [model.train_op, model.global_step, model.pred_depth],
             feed_dict={
-                model.tgt_image_input: tgt_image,
-                model.src_image_stack_input: src_image_stack,
+                model.tgt_image_input: tgt_img,
+                model.tgt_image_input_aug: tgt_img_aug,
+                model.src_image_stack_input: src_img_stack,
+                model.src_image_stack_input_aug: src_img_stack_aug,
                 model.intrinsic_input: intrinsic
             })
 
