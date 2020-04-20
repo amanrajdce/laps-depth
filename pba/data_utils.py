@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import copy
 try:
     import cPickle as pickle
 except:
@@ -34,6 +35,23 @@ import pba.policies as found_policies
 from pba.utils import parse_log_schedule
 import pba.augmentation_transforms_hp as augmentation_transforms_pba
 import pba.augmentation_transforms as augmentation_transforms_autoaug
+
+
+class PairedData(object):
+    def __init__(self, data_loader):
+        self.data_loader = data_loader
+        self.data_loader_iter = iter(self.data_loader)
+        self.iter = 0
+
+    def __iter__(self):
+        self.data_loader_iter = iter(self.data_loader)
+        self.iter = 0
+        return self
+
+    def __next__(self):
+        self.iter += 1
+        tgt_img, src_img_1, src_img_2, intrinsic = next(self.data_loader_iter)
+        return tgt_img, src_img_1, src_img_2, intrinsic
 
 
 class ImageFolderKITTI(data.Dataset):
@@ -54,7 +72,7 @@ class ImageFolderKITTI(data.Dataset):
         self.data = self.format_file_list()
         self.image_list = self.data['image_file_list']
         self.cam_list = self.data['cam_file_list']
-        assert len(self.img_list) == len(self.cam_list)
+        assert len(self.image_list) == len(self.cam_list)
 
     def read_image_data_for_input(self, img_path):
         """
@@ -111,7 +129,7 @@ class ImageFolderKITTI(data.Dataset):
         return intrinsic
 
     def __getitem__(self, index):
-        img_path = self.img_list[index]
+        img_path = self.image_list[index]
         cam_path = self.cam_list[index]
         tgt_img, src_img_1, src_img_2 = self.read_image_data_for_input(img_path)
         intrinsic = self.read_cam_data(cam_path)
@@ -119,7 +137,7 @@ class ImageFolderKITTI(data.Dataset):
         return tgt_img, src_img_1, src_img_2, intrinsic
 
     def __len__(self):
-        return len(self.img_list)
+        return len(self.image_list)
 
 
 def parse_policy(policy_emb, augmentation_transforms):
@@ -149,10 +167,11 @@ class TrainDataSet(object):
             self.hparams.kitti_root, self.hparams.train_file_path,
             self.hparams.input_height, self.hparams.input_width
         )
-        self.data_loader = torch.utils.data.DataLoader(
+        data_loader = torch.utils.data.DataLoader(
             dataset, batch_size=self.hparams.batch_size, shuffle=shuffle, num_workers=self.hparams.num_workers
         )
         self.train_size = len(dataset)
+        self.paired_data = PairedData(data_loader)
         tf.logging.info('Train dataset size: {}'.format(len(dataset)))
 
     def parse_policy(self, hparams):
@@ -235,6 +254,12 @@ class TrainDataSet(object):
         :param iteration: current iteration number
         :return: augmented batch
         """
+        # convert pytorch tensors back to numpy
+        tgt_img_batch = tgt_img_batch.numpy()
+        src_img_1_batch = src_img_1_batch.numpy()
+        src_img_2_batch = src_img_2_batch.numpy()
+        intrinsic_batch = intrinsic_batch.numpy()
+
         tgt_img_batch_aug = []
         src_img_1_batch_aug = []
         src_img_2_batch_aug = []
@@ -306,6 +331,6 @@ class TrainDataSet(object):
         return tgt_img_batch, src_img_stack_batch, intrinsic_batch
 
     def load_data(self):
-        return self.dataset_loader
+        return self.paired_data
 
 

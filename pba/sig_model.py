@@ -1,6 +1,7 @@
 
 import numpy as np
 import tensorflow as tf
+import sys
 from pba.sig_nets import *
 from pba.sig_utils import *
 
@@ -59,6 +60,7 @@ class Model(object):
         # Build train/eval model
         self.build_model()
         self._calc_num_trainable_params()
+        #sys.exit(-1)
 
         if self.is_training:
             self._build_train_op()
@@ -77,21 +79,23 @@ class Model(object):
         self.tgt_image_tile_pyramid = [tf.tile(img, [opt.num_source, 1, 1, 1]) for img in self.tgt_image_pyramid]
 
         if self.mode == "train":
+            tf.logging.info("Building train model")
             # building model in train mode
             self.src_image_stack = self.preprocess_image(self.src_image_stack_input)
             self.src_image_concat = tf.concat(
                 [self.src_image_stack[:, :, :, 3 * i:3 * (i + 1)] for i in range(opt.num_source)], axis=0
             )
             self.src_image_concat_pyramid = self.scale_pyramid(self.src_image_concat, opt.num_scales)
-            self.intrinsic = self.get_multi_scale_intrinsics(
+            self.intrinsics = self.get_multi_scale_intrinsics(
                 self.intrinsic_input, self.hparams.num_scales
             )
-            self.pred_depth = self.build_disp.net()
+            self.pred_depth = self.build_dispnet()
             self.pred_poses  = self.build_posenet()
             self.build_rigid_flow_warping()
             self.build_losses()
         else:
             # building model in eval mode
+            tf.logging.info("Building eval model")
             self.pred_depth = self.build_dispnet()
 
     def _calc_num_trainable_params(self):

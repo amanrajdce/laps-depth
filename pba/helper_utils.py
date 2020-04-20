@@ -81,7 +81,7 @@ def eval_child_model(session, model, test_files):
             inputs[b] = np.array(scaled_im)
 
         preds = session.run(
-            model.pred_depth,
+            model.pred_depth[0],
             feed_dict={model.tgt_image_input: inputs}
         )
         for b in range(batch_size):
@@ -95,7 +95,7 @@ def eval_child_model(session, model, test_files):
     return preds_all
 
 
-def run_evaluation(gt_depths, pred_depths, min_depth=1e-3, max_depth=80, verbose=False):
+def run_evaluation(gt_depths, pred_depths, min_depth=1e-3, max_depth=80, verbose=True):
     t1 = time.time()
     num_test = len(gt_depths)
     pred_depths_resized = []
@@ -185,9 +185,9 @@ def step_lr(learning_rate, epoch):
     Returns:
         The learning rate to be used for this current batch.
     """
-    if epoch < 80:
+    if epoch < 20:
         return learning_rate
-    elif epoch < 120:
+    elif epoch < 40:
         return learning_rate * 0.1
     else:
         return learning_rate * 0.01

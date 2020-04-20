@@ -50,7 +50,7 @@ class ModelTrainer(object):
         self.data_loader = self.dataset.load_data()
         np.random.seed()  # Put the random seed back to random
         # Loading gt data and files for test set
-        self.test_files = self.read_test_files(self.hparams.kitti_root)
+        self.test_files = self.read_test_files(self.hparams.kitti_raw)
         self.gt_depths = self.setup_evaluation(self.hparams.gt_path)
 
         # extra stuff for ray
@@ -66,6 +66,7 @@ class ModelTrainer(object):
         """
         with open(self.hparams.test_file_path, 'r') as f:
             test_files = f.readlines()
+            test_files = [t.rstrip() for t in test_files]
             test_files = [os.path.join(dataset_dir, t) for t in test_files]
 
         return test_files

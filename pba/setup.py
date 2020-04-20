@@ -18,7 +18,12 @@ def create_parser(state):
     parser.add_argument(
         '--kitti_root',
         required=True,
-        help='Directory where KITTI processed dataset is located.')
+        help='directory where KITTI processed dataset is located.')
+    parser.add_argument(
+        '--kitti_raw',
+        required=True,
+        help='directory where raw KITTI dataset is located.'
+    )
     parser.add_argument(
         '--train_file_path',
         required=True,
@@ -36,8 +41,8 @@ def create_parser(state):
     parser.add_argument(
         '--num_workers',
         type=int,
-        default=12,
-        help='Number of threads for data loading'
+        default=0,
+        help='Number of threads for data loading, set zero to disable multiprocessing'
     )
     parser.add_argument('--min_depth', type=float, default=1e-3, help="threshold for minimum depth for evaluation")
     parser.add_argument('--max_depth', type=float, default=80, help="threshold for maximum depth for evaluation")
@@ -155,6 +160,7 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
     tf.logging.info('data path: {}'.format(FLAGS.kitti_root))
     hparams = tf.contrib.training.HParams(
         kitti_root=FLAGS.kitti_root,
+        kitti_raw=FLAGS.kitti_raw,
         train_file_path=FLAGS.train_file_path,
         test_file_path=FLAGS.test_file_path,
         gt_path=FLAGS.gt_path,
@@ -181,7 +187,7 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         policy_dataset=FLAGS.policy_dataset)
 
     if state == 'train':
-        hparams.add_hparam('no_aug_policy', FLAGS.no_aug)
+        hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)
         hparams.add_hparam('use_hp_policy', FLAGS.use_hp_policy)
         hparams.add_hparam('use_kitti_aug', FLAGS.use_kitti_aug)
         if FLAGS.use_hp_policy:
