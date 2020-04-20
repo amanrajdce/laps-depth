@@ -204,10 +204,10 @@ class TrainDataSet(object):
                         hparams.num_epochs, hparams.hp_policy_epochs
                     )
                 tf.logging.info(
-                    'schedule policy trained on {} epochs, parsing from: {}, multiplier: {}'
-                    .format(
+                    'schedule policy trained on {} epochs, parsing from: {}, multiplier: {}'.format(
                         hparams.hp_policy_epochs, hparams.hp_policy,
-                        float(hparams.num_epochs) / hparams.hp_policy_epochs)
+                        float(hparams.num_epochs) / hparams.hp_policy_epochs
+                    )
                 )
                 raw_policy = parse_log_schedule(
                     hparams.hp_policy,

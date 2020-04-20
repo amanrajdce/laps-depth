@@ -10,7 +10,8 @@ train_file_path="$kitti_root/train.txt"
 test_file_path="$kitti_raw/test_files_eigen.txt"
 gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-name="train_full_autoaugment" # training on lite without any augmentation
+name="train_full_hp"
+hp_policy="$PWD/schedules/rcifar10_16_kitti.txt"
 
 python pba/train.py \
   --local_dir "$local_dir" \
@@ -22,7 +23,7 @@ python pba/train.py \
   --batch_size 8 --lr 0.0002 \
   --checkpoint_freq 1 --gpu 1 --cpu 3 --epochs 30 \
   --enable_batch_norm --scale_normalize \
-  --policy_dataset cifar10 \
+  --use_hp_policy --hp_policy "$hp_policy" --hp_policy_epochs 200 \
   --name "$name"
 
 # SIGNet was trained for approx 35 epochs.

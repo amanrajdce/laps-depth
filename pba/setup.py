@@ -85,6 +85,12 @@ def create_parser(state):
         default=0.85,
         help='alpha weight between SSIM and L1 in reconstruction loss'
     )
+    parser.add_argument(
+        '--grad_clipping',
+        type=float,
+        default=5.0,
+        help='gradient clipping by global norm, set to 0 to disable'
+    )
 
     # Policy settings
     if state == 'train':
@@ -103,15 +109,6 @@ def create_parser(state):
             type=int,
             default=30,
             help='number of epochs/iterations policy trained for')
-
-        # autoaugment policy setting if hp policy is disabled
-        parser.add_argument(
-            '--policy_dataset',
-            type=str,
-            default='cifar10',
-            choices=('cifar10', 'svhn'),
-            help='which augmentation policy to use in case of autoaugment'
-        )
         parser.add_argument(
             '--no_aug_policy',
             action='store_true',
@@ -125,20 +122,24 @@ def create_parser(state):
         parser.add_argument(
             '--flatten',
             action='store_true',
-            help='randomly select aug policy from schedule')
+            help='randomly select an aug policy from schedule')
         parser.add_argument('--name', type=str, default='pba kitti')
-        parser.add_argument(
-            '--grad_clipping',
-            type=float,
-            default=5.0,
-            help='gradient clipping by global norm, set to 0 to disable'
-        )
 
     elif state == 'search':
         parser.add_argument('--perturbation_interval', type=int, default=10)
         parser.add_argument('--name', type=str, default='autoaug_pbt')
     else:
         raise ValueError('unknown state')
+
+    # autoaugment policy setting it will be used only if hp policy is disabled
+    parser.add_argument(
+        '--policy_dataset',
+        type=str,
+        default='cifar10',
+        choices=('cifar10', 'svhn'),
+        help='which augmentation policy to use in case of autoaugment'
+    )
+
     args = parser.parse_args()
     tf.logging.info(str(args))
     return args

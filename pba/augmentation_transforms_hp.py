@@ -22,6 +22,7 @@ import copy
 import collections
 import inspect
 import random
+import tensorflow as tf
 
 import numpy as np
 from PIL import ImageOps, ImageEnhance, ImageFilter, Image  # pylint:disable=g-multiple-import
@@ -35,20 +36,21 @@ from pba.augmentation_transforms import _posterize_impl, _solarize_impl, _enhanc
 
 
 def apply_policy(policy, data, image_size, verbose=False):
-    """Apply the `policy` to the numpy `img`.
+    """
+    Apply the `policy` to the numpy `img`.
 
-  Args:
-    policy: A list of tuples with the form (name, probability, level) where
-      `name` is the name of the augmentation operation to apply, `probability`
-      is the probability of applying the operation and `level` is what strength
-      the operation to apply.
-    data: Numpy image list that will have `policy` applied to it.
-    image_size: (height, width) of image.
-    verbose: Whether to print applied augmentations.
+    Args:
+        policy: A list of tuples with the form (name, probability, level) where
+        `name` is the name of the augmentation operation to apply, `probability`
+        is the probability of applying the operation and `level` is what strength
+        the operation to apply.
+        data: Numpy image list that will have `policy` applied to it.
+        image_size: (height, width) of image.
+        verbose: Whether to print applied augmentations.
 
-  Returns:
-    The result of applying `policy` to `data`.
-  """
+    Returns:
+        The result of applying `policy` to `data`.
+    """
     img_data = data[:-1]
     intrinsic = data[-1]
     # Uses PBA cifar10 policy
@@ -72,9 +74,9 @@ def apply_policy(policy, data, image_size, verbose=False):
             if count == 0:
                 break
         pil_img_data = pil_unwrap(pil_img_data, image_size)
-        return [pil_img_data, intrinsic]
+        return pil_img_data + [intrinsic]
     else:
-        return [img_data, intrinsic]
+        return img_data + [intrinsic]
 
 
 class TransformT(object):
@@ -131,6 +133,79 @@ def _crop_impl(pil_img, level, image_size, interpolation=Image.BILINEAR):
     return resized
 
 
+def int_parameter(level, maxval):
+    """Helper function to scale `val` between 0 and maxval .
+
+  Args:
+    level: Level of the operation that will be between [0, `PARAMETER_MAX`].
+    maxval: Maximum value that the operation can have. This will be scaled
+      to level/PARAMETER_MAX.
+
+  Returns:
+    An int that results from scaling `maxval` according to `level`.
+  """
+    return int(level * maxval / PARAMETER_MAX)
+
+
+def create_cutout_mask(img_height, img_width, num_channels, size):
+    """Creates a zero mask used for cutout of shape `img_height` x `img_width`.
+
+  Args:
+    img_height: Height of image where cutout mask will be applied to.
+    img_width: Width of image where cutout mask will be applied to.
+    num_channels: Number of channels in the image.
+    size: size of the zeros mask.
+
+  Returns:
+    A mask of shape `img_height` x `img_width` with all ones except for a
+    square of zeros of shape `size` x `size`. This mask is meant to be
+    elementwise multiplied with the original image. Additionally returns
+    the `upper_coord` and `lower_coord` which specify where the cutout mask
+    will be applied.
+  """
+    # Sample center where cutout mask will be applied
+    height_loc = np.random.randint(low=10, high=img_height-10)
+    width_loc = np.random.randint(low=10, high=img_width-10)
+
+    # Determine upper left and lower right corners of patch
+    upper_coord = (max(0, height_loc - size // 2), max(0, width_loc - size // 2))
+    lower_coord = (min(img_height, height_loc + size // 2), min(img_width, width_loc + size // 2))
+
+    mask_height = lower_coord[0] - upper_coord[0]
+    mask_width = lower_coord[1] - upper_coord[1]
+    assert mask_height > 0
+    assert mask_width > 0
+    assert 0 <= upper_coord[0] < img_height
+    assert 0 <= upper_coord[1] < img_width
+    assert 0 <= lower_coord[0] < img_height
+    assert 0 <= lower_coord[1] < img_width
+
+    mask = np.ones((img_height, img_width, num_channels))
+    zeros = np.zeros((mask_height, mask_width, num_channels))
+    mask[upper_coord[0]:lower_coord[0], upper_coord[1]:lower_coord[1], :] = zeros
+    return mask, upper_coord, lower_coord
+
+
+def _cutout_pil_impl(pil_img, level, image_size):
+    """Apply cutout to pil_img at the specified level."""
+    size = int_parameter(level, 20)
+    if size <= 0:
+        return pil_img
+    img_height, img_width, num_channels = (image_size[0], image_size[1], 3)
+    _, upper_coord, lower_coord = create_cutout_mask(img_height, img_width, num_channels, size)
+
+    # tf.logging.info("img_height: {}, img_width:{}".format(img_height, img_width))
+    # tf.logging.info("upper: {}, lower: {}".format(upper_coord, lower_coord))
+    # tf.logging.info("pil_height: {}, pil_width:{}".format(pil_img.height, pil_img.width))
+
+    pixels = pil_img.load()  # create the pixel map
+    for i in range(upper_coord[0], lower_coord[0]):  # for every row:
+        for j in range(upper_coord[1], lower_coord[1]):  # for every col:
+            pixels[j, i] = (125, 122, 113, 0)  # set the colour accordingly
+    return pil_img
+
+
+cutout = TransformT('Cutout', _cutout_pil_impl)
 crop_bilinear = TransformT('CropBilinear', _crop_impl)
 solarize = TransformT('Solarize', _solarize_impl)
 color = TransformT('Color', _enhancer_impl(ImageEnhance.Color))
@@ -147,6 +222,7 @@ HP_TRANSFORMS = [
     solarize,
     equalize,
     auto_contrast,
+    cutout,
     contrast
 ]
 # TODO crop_bilinear and flip_lr

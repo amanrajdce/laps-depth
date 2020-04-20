@@ -10,7 +10,7 @@ train_file_path="$kitti_root/train.txt"
 test_file_path="$kitti_raw/test_files_eigen.txt"
 gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-name="train_full_noaug" # training on lite without any augmentation
+name="train_full_noaug"
 
 python pba/train.py \
   --local_dir "$local_dir" \
