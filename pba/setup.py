@@ -65,7 +65,6 @@ def create_parser(state):
     parser.add_argument('--input_height', type=int, default=128, help='height of input image to model')
     parser.add_argument('--input_width', type=int, default=416, help='width of input image to model')
     parser.add_argument('--num_samples', type=int, default=1, help='number of Ray samples')
-    parser.add_argument('--enable_batch_norm', action='store_true', help='whether to enable batch normalization')
     parser.add_argument('--max_outputs', type=int, default=4, help='how many minibatch per images we want to save')
     parser.add_argument('--use_regularization', action='store_true', help='whether or not to use regularization term')
     parser.add_argument(
@@ -88,8 +87,14 @@ def create_parser(state):
     parser.add_argument(
         '--grad_clipping',
         type=float,
-        default=5.0,
+        default=0.0,
         help='gradient clipping by global norm, set to 0 to disable'
+    )
+    parser.add_argument(
+        '--log_iter',
+        type=int,
+        default=50,
+        help="logs image dato to comet.ml cloud by this interval"
     )
 
     # Policy settings
@@ -174,7 +179,6 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         lr_decay=FLAGS.lr_decay,
         input_height=FLAGS.input_height,
         input_width=FLAGS.input_width,
-        enable_batch_norm=FLAGS.enable_batch_norm,
         max_outputs=FLAGS.max_outputs,
         use_regularization=FLAGS.use_regularization,
         dispnet_encoder=FLAGS.dispnet_encoder,
@@ -185,7 +189,9 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         num_source=FLAGS.num_source,
         alpha_recon_image=FLAGS.alpha_recon_image,
         gradient_clipping_by_global_norm=FLAGS.grad_clipping,
-        policy_dataset=FLAGS.policy_dataset)
+        policy_dataset=FLAGS.policy_dataset,
+        name=FLAGS.name,
+        log_iter=FLAGS.log_iter)
 
     if state == 'train':
         hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)

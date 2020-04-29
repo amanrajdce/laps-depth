@@ -4,6 +4,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from comet_ml import Experiment
+
 import os
 import ray
 from ray.tune import run_experiments
@@ -22,7 +24,13 @@ class RayModel(Trainable):
         tf.logging.set_verbosity(tf.logging.INFO)
         tf.logging.info("calling setup")
         self.hparams = tf.contrib.training.HParams(**self.config)
-        self.trainer = ModelTrainer(self.hparams)
+        project_name = self.hparams.name + "_" + self.trial_name
+        self.experiment = Experiment(
+            api_key="rY4zUJYxfKHYUlgAirQZy2190",
+            project_name=project_name, workspace="amanraj42"
+        )
+        self.hparams = tf.contrib.training.HParams(**self.config)
+        self.trainer = ModelTrainer(self.hparams, comet_exp=self.experiment)
 
     # TODO, fix training, integrate KITTI evaluation
     def _train(self):
@@ -30,17 +38,8 @@ class RayModel(Trainable):
         tf.logging.info("training for iteration: {}".format(self._iteration))
         eval_preds = self.trainer.run_model(self._iteration)
         # pylint: disable=protected-access
-        abs_rel, sq_rel, rms, log_rms, d1_all, a1, a2, a3 = self.trainer.run_evaluation(eval_preds)
-        return {
-            "abs_rel": abs_rel,
-            "sq_rel": sq_rel,
-            "rms": rms,
-            "log_rms": log_rms,
-            "d1_all": d1_all,
-            "a1": a1,
-            "a2": a2,
-            "a3": a3
-        }
+        results = self.trainer.run_evaluation(eval_preds, self._iteration)
+        return results
 
     def _save(self, checkpoint_dir):
         """Uses tf trainer object to checkpoint."""

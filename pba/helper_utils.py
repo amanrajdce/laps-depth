@@ -46,14 +46,16 @@ def compute_errors(gt, pred):
     return abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3
 
 
-def eval_child_model(session, model, test_files):
+def eval_child_model(session, model, epoch, test_files, comet_exp=None):
     """
     Evaluates `model` on held out data depending on `mode`.
 
     Args:
         session: TensorFlow session the model will be run with.
         model: TensorFlow model that will be evaluated.
+        epoch: epoch number at which evaluation is done
         test_files: list of testing files
+        comet_exp: comet.ml experiment name to write log to
 
     Returns:
         Accuracy of `model` when evaluated on the specified dataset.
@@ -90,12 +92,29 @@ def eval_child_model(session, model, test_files):
                 break
             preds_all.append(preds[b, :, :, 0])
 
+        # comet.ml log all the images and errors
+        if comet_exp is not None and t % 40 == 0:
+            curr_batch_size = len(inputs)
+            with comet_exp.test():
+                for b in range(0, curr_batch_size):
+                    step = t + b
+                    # input image
+                    comet_exp.log_image(
+                        inputs[b, :, :, :], name="test_iter" + str(step) + "_input",
+                        image_format="png", image_channels="last", step=epoch
+                    )
+                    # prediction
+                    comet_exp.log_image(
+                        preds[b, :, :, :], name="test_iter" + str(step) + "_pred",
+                        image_format="png", image_colormap="plasma", image_channels="last", step=epoch
+                    )
+
     assert len(preds_all) == len(test_files)
 
     return preds_all
 
 
-def run_evaluation(gt_depths, pred_depths, min_depth=1e-3, max_depth=80, verbose=True):
+def run_evaluation(gt_depths, pred_depths, curr_epoch, min_depth=1e-3, max_depth=80, verbose=True, comet_exp=None):
     t1 = time.time()
     num_test = len(gt_depths)
     pred_depths_resized = []
@@ -151,7 +170,21 @@ def run_evaluation(gt_depths, pred_depths, min_depth=1e-3, max_depth=80, verbose
             abs_rel.mean(), sq_rel.mean(), rms.mean(), log_rms.mean(), d1_all.mean(), a1.mean(), a2.mean(), a3.mean())
         )
 
-    return abs_rel.mean(), sq_rel.mean(), rms.mean(), log_rms.mean(), d1_all.mean(), a1.mean(), a2.mean(), a3.mean()
+    results = {
+        "abs_rel": abs_rel.mean(),
+        "sq_rel": sq_rel.mean(),
+        "rms": rms.mean(),
+        "log_rms": log_rms.mean(),
+        "d1_all": d1_all.mean(),
+        "a1": a1.mean(),
+        "a2": a2.mean(),
+        "a3": a3.mean()
+    }
+    if comet_exp is not None:
+        with comet_exp.test():  # to provide context for comet.ml graphs
+            comet_exp.log_metrics(results, step=curr_epoch)
+
+    return results
 
 
 def cosine_lr(learning_rate, epoch, iteration, batches_per_epoch, total_epochs):
@@ -215,7 +248,9 @@ def get_lr(curr_epoch, hparams, train_size, iteration=None):
     return lr
 
 
-def run_epoch_training(session, model, data_loader, train_size, batch_aug_fn, curr_epoch):
+def run_epoch_training(
+        session, model, data_loader, train_size, batch_aug_fn, curr_epoch, comet_exp=None
+):
     """Runs one epoch of training for the model passed in.
 
     Args:
@@ -224,10 +259,12 @@ def run_epoch_training(session, model, data_loader, train_size, batch_aug_fn, cu
         data_loader: DataSet object that contains data that `model` will evaluate.
         curr_epoch: How many of epochs of training have been done so far.
         train_size: Size of training set
+        comet_exp: comet.ml experiment name to write log to
 
     Returns:
         The accuracy of 'model' on the training set
     """
+
     steps_per_epoch = int(train_size / model.hparams.batch_size)
     tf.logging.info('steps per epoch: {}'.format(steps_per_epoch))
     curr_step = session.run(model.global_step)
@@ -249,8 +286,10 @@ def run_epoch_training(session, model, data_loader, train_size, batch_aug_fn, cu
         src_img_stack = np.concatenate((src_img_1, src_img_2), axis=-1)
         tgt_img_aug, src_img_stack_aug, intrinsic = batch_aug_fn(tgt_img, src_img_1, src_img_2, intrinsic, curr_epoch)
 
-        _, step, preds = session.run(
-            [model.train_op, model.global_step, model.pred_depth],
+        _, step, preds, fwd_warp, fwd_error, bwd_warp, bwd_error = session.run(
+            [model.train_op, model.global_step, model.pred_depth[0],
+             model.fwd_rigid_warp_pyramid[0], model.fwd_rigid_error_scale[0],
+             model.bwd_rigid_warp_pyramid[0], model.bwd_rigid_error_scale[0]],
             feed_dict={
                 model.tgt_image_input: tgt_img,
                 model.tgt_image_input_aug: tgt_img_aug,
@@ -258,4 +297,49 @@ def run_epoch_training(session, model, data_loader, train_size, batch_aug_fn, cu
                 model.src_image_stack_input_aug: src_img_stack_aug,
                 model.intrinsic_input: intrinsic
             })
+
+        # comet.ml log all the images and errors
+        global_step = step + (steps_per_epoch * curr_epoch)
+        if comet_exp is not None and global_step % model.hparams.log_iter == 0:
+            curr_batch_size = len(tgt_img)
+            with comet_exp.train():  # train context for comet.ml logging into cloud
+                for b in range(0, curr_batch_size):
+                    # create src1_tgt_src2 image
+                    src1_tgt_src2 = np.concatenate(
+                        (src_img_stack[b, :, :, :3], tgt_img[b, :, :, :], src_img_stack[b, :, :, 3:]), axis=1
+                    )
+                    src1_tgt_src2_aug = np.concatenate(
+                        (src_img_stack_aug[b, :, :, :3], tgt_img_aug[b, :, :, :], src_img_stack_aug[b, :, :, 3:]), axis=1
+                    )
+                    comet_exp.log_image(
+                        src1_tgt_src2, name="src_tgt_src_b" + str(b),
+                        image_format="png", image_channels="last", step=global_step
+                    )
+                    comet_exp.log_image(
+                        src1_tgt_src2_aug, name="src_tgt_src_aug_b" + str(b),
+                        image_format="png", image_channels="last", step=global_step
+                    )
+                    # prediction
+                    comet_exp.log_image(
+                        preds[b, :, :, :], name="preds_b" + str(b), image_format="png",
+                        image_colormap="plasma", image_channels="last", step=global_step
+                    )
+                    # warping results
+                    fwd_bwd_warp = np.concatenate(
+                        (fwd_warp[b, :, :, :], bwd_warp[b, :, :, :]), axis=1
+                    )
+                    comet_exp.log_image(
+                        fwd_bwd_warp, name="fwd_bwd_warp_b" + str(b),
+                        image_format="png", image_channels="last", step=global_step
+                    )
+                    # error
+                    fwd_bwd_warp_error = np.concatenate(
+                        (fwd_error[b, :, :, :], bwd_error[b, :, :, :]), axis=1
+                    )
+                    comet_exp.log_image(
+                        fwd_bwd_warp_error, name="fwd_bwd_error_b" + str(b),
+                        image_format="png", image_channels="last", step=global_step
+                    )
+
+
 

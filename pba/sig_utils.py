@@ -4,6 +4,7 @@ from __future__ import division
 import numpy as np
 import tensorflow as tf
 
+
 def euler2mat(z, y, x):
   """Converts euler angles to rotation matrix
    TODO: remove the dimension for 'N' (deprecated for converting all source

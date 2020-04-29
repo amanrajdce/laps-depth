@@ -10,7 +10,7 @@ train_file_path="$kitti_root/train.txt"
 test_file_path="$kitti_raw/test_files_eigen.txt"
 gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-name="train_full_autoaugment"
+name="train_full_autoaugment_run2"
 
 python pba/train.py \
   --local_dir "$local_dir" \
@@ -19,7 +19,7 @@ python pba/train.py \
   --train_file_path "$train_file_path" \
   --test_file_path "$test_file_path" \
   --gt_path "$gt_path" \
-  --batch_size 8 --lr 0.0002 \
+  --batch_size 8 --lr 0.0002 --grad_clipping 0.0 \
   --checkpoint_freq 1 --gpu 1 --cpu 3 --epochs 30 \
   --enable_batch_norm --scale_normalize \
   --policy_dataset cifar10 \

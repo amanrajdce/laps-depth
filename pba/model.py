@@ -26,6 +26,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
+import sys
 
 import pba.data_utils as data_utils
 import pba.helper_utils as helper_utils
@@ -35,13 +36,17 @@ from pba.sig_model import Model
 class ModelTrainer(object):
     """Trains an instance of the Model class."""
 
-    def __init__(self, hparams):
+    def __init__(self, hparams, comet_exp=None):
         """
         Build model architecture and setup train and test dataloaders
         :param hparams: parsed params
+        :param comet_exp: name of comet project to log data online
         """
         self._session = None
         self.hparams = hparams
+        self.comet_exp = comet_exp
+        if self.comet_exp is not None:
+            self.comet_exp.log_parameters(self.hparams.values())
 
         # Initialize the dataset and dataloader
         np.random.seed(0)
@@ -89,11 +94,12 @@ class ModelTrainer(object):
         self.saver.restore(self.session, checkpoint_path)
         tf.logging.warning('Loaded child model checkpoint from {}'.format(checkpoint_path))
 
-    def eval_child_model(self, model):
+    def eval_child_model(self, model, epoch):
         """Evaluate the child model.
 
         Args:
           model: image model that will be evaluated.
+          epoch: epoch number on which model is evaluated
 
         Returns:
           predicted depth maps on kitti test split
@@ -101,7 +107,7 @@ class ModelTrainer(object):
         tf.logging.info('Evaluating child model')
         while True:
             try:
-                preds_all = helper_utils.eval_child_model(self.session, model, self.test_files)
+                preds_all = helper_utils.eval_child_model(self.session, model, epoch, self.test_files, self.comet_exp)
                 # If epoch trained without raising the below errors, break
                 # from loop.
                 break
@@ -119,6 +125,10 @@ class ModelTrainer(object):
         sess_cfg.gpu_options.allow_growth = True
         self._session = tf.Session('', config=sess_cfg)
         self._session.run([self.m.init, self.meval.init])
+
+        # log the graph to comet.ml
+        if self.comet_exp is not None:
+            self.comet_exp.set_model_graph(self._session.graph)
         return self._session
 
     def _build_models(self):
@@ -143,7 +153,7 @@ class ModelTrainer(object):
             try:
                 helper_utils.run_epoch_training(
                     self.session, self.m, self.data_loader, self.train_size,
-                    self.dataset.augment_batch, curr_epoch
+                    self.dataset.augment_batch, curr_epoch, self.comet_exp
                 )
                 break
             except (tf.errors.AbortedError, tf.errors.UnavailableError) as e:
@@ -154,7 +164,7 @@ class ModelTrainer(object):
     def run_model(self, epoch):
         """Trains and evalutes the image model."""
         self._run_training_loop(epoch)
-        eval_preds = self.eval_child_model(self.meval)
+        eval_preds = self.eval_child_model(self.meval, epoch)
         return eval_preds
 
     def setup_evaluation(self, gt_path):
@@ -175,10 +185,10 @@ class ModelTrainer(object):
 
         return gt_depths
 
-    def run_evaluation(self, pred_depths):
+    def run_evaluation(self, pred_depths, epoch):
         results = helper_utils.run_evaluation(
-            self.gt_depths, pred_depths, min_depth=self.hparams.min_depth,
-            max_depth=self.hparams.max_depth, verbose=True
+            self.gt_depths, pred_depths, epoch, min_depth=self.hparams.min_depth,
+            max_depth=self.hparams.max_depth, verbose=True, comet_exp=self.comet_exp
         )
         return results
 

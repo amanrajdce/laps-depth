@@ -16,7 +16,6 @@ class Model(object):
         assert mode in ['train', 'eval']
         self.is_training = True if mode == "train" else False
         self.mode = mode
-        self.enable_bn = hparams.enable_batch_norm
 
     def build(self):
         """Construct the model."""
@@ -66,7 +65,6 @@ class Model(object):
         if self.is_training:
             self.global_step = tf.train.get_or_create_global_step()
 
-        self.bn_params = self.get_batch_norm_scope(self.is_training)
         # Build train/eval model
         self.build_model()
         self._calc_num_trainable_params()
@@ -80,7 +78,70 @@ class Model(object):
         with tf.device('/cpu:0'):
             self.saver = tf.train.Saver(max_to_keep=10)
 
-        # self.init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+        self.init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+
+    def signet_data_augmentation(self, im, intrinsics, out_h, out_w):
+        # Random scaling
+        def random_scaling(im, intrinsics):
+            batch_size, in_h, in_w, _ = im.get_shape().as_list()
+            scaling = tf.random_uniform([2], 1, 1.15)
+            x_scaling = scaling[0]
+            y_scaling = scaling[1]
+            out_h = tf.cast(in_h * y_scaling, dtype=tf.int32)
+            out_w = tf.cast(in_w * x_scaling, dtype=tf.int32)
+            im = tf.image.resize_area(im, [out_h, out_w])
+            fx = intrinsics[:, 0, 0] * x_scaling
+            fy = intrinsics[:, 1, 1] * y_scaling
+            cx = intrinsics[:, 0, 2] * x_scaling
+            cy = intrinsics[:, 1, 2] * y_scaling
+            intrinsics = self.make_intrinsics_matrix(fx, fy, cx, cy)
+            return im, intrinsics, [out_h, out_w]
+
+        # Random cropping
+        def random_cropping(im, intrinsics, out_h, out_w):
+            batch_size, in_h, in_w, _ = tf.unstack(tf.shape(im))
+            offset_y = tf.random_uniform([1], 0, in_h - out_h + 1, dtype=tf.int32)[0]
+            offset_x = tf.random_uniform([1], 0, in_w - out_w + 1, dtype=tf.int32)[0]
+            im = tf.image.crop_to_bounding_box(im, offset_y, offset_x, out_h, out_w)
+            fx = intrinsics[:, 0, 0]
+            fy = intrinsics[:, 1, 1]
+            cx = intrinsics[:, 0, 2] - tf.cast(offset_x, dtype=tf.float32)
+            cy = intrinsics[:, 1, 2] - tf.cast(offset_y, dtype=tf.float32)
+            intrinsics = self.make_intrinsics_matrix(fx, fy, cx, cy)
+            return im, intrinsics, [offset_y, offset_x, out_h, out_w]
+
+        # Random coloring
+        def random_coloring(im):
+            batch_size, in_h, in_w, in_c = im.get_shape().as_list()
+            im_f = tf.image.convert_image_dtype(im, tf.float32)
+
+            # randomly shift gamma
+            random_gamma = tf.random_uniform([], 0.8, 1.2)
+            im_aug = im_f ** random_gamma
+
+            # randomly shift brightness
+            random_brightness = tf.random_uniform([], 0.5, 2.0)
+            im_aug = im_aug * random_brightness
+
+            # randomly shift color
+            random_colors = tf.random_uniform([in_c], 0.8, 1.2)
+            white = tf.ones([batch_size, in_h, in_w])
+            color_image = tf.stack([white * random_colors[i] for i in range(in_c)], axis=3)
+            im_aug *= color_image
+
+            # saturate
+            im_aug = tf.clip_by_value(im_aug, 0, 1)
+
+            im_aug = tf.image.convert_image_dtype(im_aug, tf.uint8)
+
+            return im_aug
+
+        im, intrinsics, out_hw = random_scaling(im, intrinsics)
+        im, intrinsics, yxhw = random_cropping(im, intrinsics, out_h, out_w)
+        do_augment = tf.random_uniform([], 0, 1)
+        im = tf.cond(do_augment > 0.5, lambda: random_coloring(im), lambda: im)
+
+        return im, intrinsics
 
     def build_model(self):
         opt = self.hparams
@@ -113,6 +174,7 @@ class Model(object):
             self.pred_depth = self.build_dispnet()
 
     def _calc_num_trainable_params(self):
+        # TODO check for correctness for eval mode case
         self.num_trainable_params = np.sum(
             [np.prod(var.get_shape().as_list()) for var in tf.trainable_variables()]
         )
@@ -134,28 +196,6 @@ class Model(object):
 
         with tf.control_dependencies([apply_op]):
             self.train_op = tf.group(*train_ops)
-
-    def get_batch_norm_scope(self, is_training):
-        """Return Batch norm params for model
-
-        Args:
-          is_training: Is the model training or not.
-
-        Returns:
-          scope for batch norm layers to be used in model.
-        """
-        batch_norm_decay = 0.9
-        batch_norm_epsilon = 1e-5
-        batch_norm_params = {
-            # Decay for the moving averages.
-            'decay': batch_norm_decay,
-            # epsilon to prevent 0s in variance.
-            'epsilon': batch_norm_epsilon,
-            'scale': True,
-            # collection containing the moving mean and moving variance.
-            'is_training': is_training,
-        }
-        return batch_norm_params
 
     def make_intrinsics_matrix(self, fx, fy, cx, cy):
         """
@@ -214,7 +254,7 @@ class Model(object):
                     [self.dispnet_inputs, self.src_image_stack_aug[:, :, :, 3 * i:3 * (i + 1)]], axis=0
                 )
 
-        self.pred_disp = disp_net(opt, self.dispnet_inputs, self.bn_params)
+        self.pred_disp = disp_net(opt, self.dispnet_inputs, self.is_training)
         if opt.scale_normalize:
             # As proposed in https://arxiv.org/abs/1712.00175, this can
             # bring improvement in depth estimation, but not included in our paper.
@@ -223,8 +263,8 @@ class Model(object):
         pred_depth = [1. / d for d in self.pred_disp]
 
         # TODO Add multi-scale depth maps to TF summary.
-        for i in range(len(pred_depth)):
-            tf.summary.image('pred_depth_' + str(i), pred_depth[i], max_outputs=opt.max_outputs)
+        # for i in range(len(pred_depth)):
+        #    tf.summary.image('pred_depth_' + str(i), pred_depth[i], max_outputs=opt.max_outputs)
 
         return pred_depth
 
@@ -232,7 +272,7 @@ class Model(object):
         opt = self.hparams
         # build posenet_inputs
         self.posenet_inputs = tf.concat([self.tgt_image_aug, self.src_image_stack_aug], axis=3)
-        pred_poses = pose_net(opt, self.posenet_inputs, self.bn_params)
+        pred_poses = pose_net(opt, self.posenet_inputs, self.is_training)
         return pred_poses
 
     def build_rigid_flow_warping(self):
@@ -269,6 +309,7 @@ class Model(object):
             flow_warp(self.tgt_image_tile_pyramid[s], self.bwd_rigid_flow_pyramid[s]) for s in range(opt.num_scales)
         ]
 
+        """
         # TODO Record forward rigid flow warping result on tensorboard
         for i in range(len(self.fwd_rigid_warp_pyramid)):
             tf.summary.image(
@@ -279,6 +320,7 @@ class Model(object):
             tf.summary.image(
                 "bwd_rigid_warp_scale" + str(i), self.bwd_rigid_warp_pyramid[i], max_outputs=opt.max_outputs
             )
+        """
 
         # compute reconstruction errors based on the rigid flow
         self.fwd_rigid_error_pyramid = [
@@ -295,12 +337,12 @@ class Model(object):
         self.bwd_rigid_error_scale = []
         for i in range(len(self.fwd_rigid_error_pyramid)):
             tmp_fwd_rigid_error_scale = tf.reduce_mean(self.fwd_rigid_error_pyramid[i], axis=3, keepdims=True)
-            tf.summary.image("fwd_rigid_error_scale" + str(i), tmp_fwd_rigid_error_scale, max_outputs=opt.max_outputs)
+            # tf.summary.image("fwd_rigid_error_scale" + str(i), tmp_fwd_rigid_error_scale, max_outputs=opt.max_outputs)
             self.fwd_rigid_error_scale.append(tmp_fwd_rigid_error_scale)
         # TODO Record bwd rigid flow warp error on tensorboard
         for i in range(len(self.bwd_rigid_error_pyramid)):
             tmp_bwd_rigid_error_scale = tf.reduce_mean(self.bwd_rigid_error_pyramid[i], axis=3, keepdims=True)
-            tf.summary.image("bwd_rigid_error_scale" + str(i), tmp_bwd_rigid_error_scale, max_outputs=opt.max_outputs)
+            # tf.summary.image("bwd_rigid_error_scale" + str(i), tmp_bwd_rigid_error_scale, max_outputs=opt.max_outputs)
             self.bwd_rigid_error_scale.append(tmp_bwd_rigid_error_scale)
 
     def build_losses(self):

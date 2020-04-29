@@ -2,6 +2,7 @@ from __future__ import division
 from archive.sig_nets import *
 from archive.utils import *
 # TODO randomness
+import tensorflow as tf
 import random
 
 class SIGNetModel(object):
