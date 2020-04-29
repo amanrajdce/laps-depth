@@ -145,6 +145,7 @@ class Model(object):
 
     def build_model(self):
         opt = self.hparams
+        # kitti augmentation and then preprocess the image to [-1, 1]
         self.tgt_image_aug = self.preprocess_image(self.tgt_image_input_aug)  # will be fed to network
 
         if self.mode == "train":
