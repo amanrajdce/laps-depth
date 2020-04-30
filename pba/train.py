@@ -24,10 +24,9 @@ class RayModel(Trainable):
         tf.logging.set_verbosity(tf.logging.INFO)
         tf.logging.info("calling setup")
         self.hparams = tf.contrib.training.HParams(**self.config)
-        project_name = self.hparams.name + "_" + self.trial_name
         self.experiment = Experiment(
             api_key="rY4zUJYxfKHYUlgAirQZy2190",
-            project_name=project_name, workspace="amanraj42"
+            project_name=self.hparams.name, workspace="amanraj42"
         )
         self.hparams = tf.contrib.training.HParams(**self.config)
         self.trainer = ModelTrainer(self.hparams, comet_exp=self.experiment)

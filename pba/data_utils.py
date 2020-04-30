@@ -320,11 +320,6 @@ class TrainDataSet(object):
                 # no data augmentation policy
                 pass
 
-            if self.hparams.use_kitti_aug:
-                # TODO implement augmentations from SIGNet
-                # random_scaling, random_cropping,  random_coloring
-                raise NotImplementedError()
-
             tgt_img_batch_aug.append(tgt_img)
             src_img_1_batch_aug.append(src_img_1)
             src_img_2_batch_aug.append(src_img_2)

@@ -84,7 +84,7 @@ def eval_child_model(session, model, epoch, test_files, comet_exp=None):
 
         preds = session.run(
             model.pred_depth[0],
-            feed_dict={model.tgt_image_input_aug: inputs}
+            feed_dict={model.tgt_image_input: inputs}
         )
         for b in range(batch_size):
             idx = t + b
@@ -218,9 +218,9 @@ def step_lr(learning_rate, epoch):
     Returns:
         The learning rate to be used for this current batch.
     """
-    if epoch < 20:
+    if epoch < 15:
         return learning_rate
-    elif epoch < 40:
+    elif epoch < 30:
         return learning_rate * 0.1
     else:
         return learning_rate * 0.01
@@ -282,34 +282,45 @@ def run_epoch_training(
         if step % 20 == 0:
             tf.logging.info('Training {}/{}'.format(step, steps_per_epoch))
 
+        # original read input from disk
         tgt_img, src_img_1, src_img_2, intrinsic = batch
         src_img_stack = np.concatenate((src_img_1, src_img_2), axis=-1)
+
+        # augmented input from policy methods
         tgt_img_aug, src_img_stack_aug, intrinsic = batch_aug_fn(tgt_img, src_img_1, src_img_2, intrinsic, curr_epoch)
 
-        _, step, preds, fwd_warp, fwd_error, bwd_warp, bwd_error = session.run(
-            [model.train_op, model.global_step, model.pred_depth[0],
-             model.fwd_rigid_warp_pyramid[0], model.fwd_rigid_error_scale[0],
-             model.bwd_rigid_warp_pyramid[0], model.bwd_rigid_error_scale[0]],
-            feed_dict={
-                model.tgt_image_input: tgt_img,
-                model.tgt_image_input_aug: tgt_img_aug,
-                model.src_image_stack_input: src_img_stack,
-                model.src_image_stack_input_aug: src_img_stack_aug,
-                model.intrinsic_input: intrinsic
-            })
+        _, step, preds, tgt_img_final, src_img_stack_final, fwd_warp, fwd_error, bwd_warp, bwd_error, loss = \
+            session.run(
+                [model.train_op, model.global_step, model.pred_depth[0],
+                 model.tgt_image, model.src_image_stack,
+                 model.fwd_rigid_warp_pyramid[0], model.fwd_rigid_error_scale[0],
+                 model.bwd_rigid_warp_pyramid[0], model.bwd_rigid_error_scale[0], model.total_loss],
+                feed_dict={
+                    model.tgt_image_input: tgt_img_aug,
+                    model.src_image_stack_input: src_img_stack_aug,
+                    model.intrinsic_input: intrinsic
+                })
+
+        # tgt_img_final: final target with signet augmentation if enabled
+        # src_img_stack_final: final src images with signet augmentation if enabled
 
         # comet.ml log all the images and errors
         global_step = step + (steps_per_epoch * curr_epoch)
         if comet_exp is not None and global_step % model.hparams.log_iter == 0:
             curr_batch_size = len(tgt_img)
             with comet_exp.train():  # train context for comet.ml logging into cloud
+                # train metrics
+                comet_exp.log_metric("total_loss", loss, step=global_step)
+                comet_exp.log_metric("lr", curr_lr, step=global_step)
+
+                # images
                 for b in range(0, curr_batch_size):
                     # create src1_tgt_src2 image
                     src1_tgt_src2 = np.concatenate(
                         (src_img_stack[b, :, :, :3], tgt_img[b, :, :, :], src_img_stack[b, :, :, 3:]), axis=1
                     )
                     src1_tgt_src2_aug = np.concatenate(
-                        (src_img_stack_aug[b, :, :, :3], tgt_img_aug[b, :, :, :], src_img_stack_aug[b, :, :, 3:]), axis=1
+                        (src_img_stack_final[b, :, :, :3], tgt_img_final[b, :, :, :], src_img_stack_final[b, :, :, 3:]), axis=1
                     )
                     comet_exp.log_image(
                         src1_tgt_src2, name="src_tgt_src_b" + str(b),

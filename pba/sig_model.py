@@ -43,16 +43,8 @@ class Model(object):
                 tf.float32, [self.batch_size, self.input_height, self.input_width, 3 * ns]  # assuming two source images
             )
             self.intrinsic_input = tf.placeholder(tf.float32, [self.batch_size, 3, 3])
-
-            # variables used to fed augmented data to network
-            self.tgt_image_input_aug = tf.placeholder(
-                tf.float32, [self.batch_size, self.input_height, self.input_width, 3]
-            )
-            self.src_image_stack_input_aug = tf.placeholder(
-                tf.float32, [self.batch_size, self.input_height, self.input_width, 3 * ns]  # assuming two source images
-            )
         else:
-            self.tgt_image_input_aug = tf.placeholder(
+            self.tgt_image_input = tf.placeholder(
                 tf.float32, [None, self.input_height, self.input_width, 3]
             )
 
@@ -123,16 +115,19 @@ class Model(object):
             random_brightness = tf.random_uniform([], 0.5, 2.0)
             im_aug = im_aug * random_brightness
 
+            # TODO: apply same color shift for all frames
             # randomly shift color
+            in_c = 3
             random_colors = tf.random_uniform([in_c], 0.8, 1.2)
             white = tf.ones([batch_size, in_h, in_w])
             color_image = tf.stack([white * random_colors[i] for i in range(in_c)], axis=3)
+
+            color_image = tf.concat([color_image, color_image, color_image], axis=3)
             im_aug *= color_image
 
             # saturate
             im_aug = tf.clip_by_value(im_aug, 0, 1)
-
-            im_aug = tf.image.convert_image_dtype(im_aug, tf.uint8)
+            im_aug = tf.image.convert_image_dtype(im_aug, tf.float32)
 
             return im_aug
 
@@ -145,19 +140,22 @@ class Model(object):
 
     def build_model(self):
         opt = self.hparams
-        # kitti augmentation and then preprocess the image to [-1, 1]
-        self.tgt_image_aug = self.preprocess_image(self.tgt_image_input_aug)  # will be fed to network
 
         if self.mode == "train":
             tf.logging.info("Building train model")
-            self.tgt_image = self.preprocess_image(self.tgt_image_input)  # will be used for loss computation only
+            image_all = tf.concat([self.tgt_image_input, self.src_image_stack_input], axis=3)
+            # kitti augmentation is enabled
+            if opt.use_kitti_aug:
+                image_all, self.intrinsic_input = self.signet_data_augmentation(
+                    image_all, self.intrinsic_input, opt.input_height, opt.input_width
+                )
+            # image_channels=3*opt.num_source
+            self.tgt_image = self.preprocess_image(image_all[:, :, :, :3])
+            self.src_image_stack = self.preprocess_image(image_all[:, :, :, 3:])
+
             self.tgt_image_pyramid = self.scale_pyramid(self.tgt_image, opt.num_scales)
             self.tgt_image_tile_pyramid = [tf.tile(img, [opt.num_source, 1, 1, 1]) for img in self.tgt_image_pyramid]
 
-            # building model in train mode
-            self.src_image_stack_aug = self.preprocess_image(self.src_image_stack_input_aug)  # will be fed to network
-
-            self.src_image_stack = self.preprocess_image(self.src_image_stack_input)
             self.src_image_concat = tf.concat(
                 [self.src_image_stack[:, :, :, 3 * i:3 * (i + 1)] for i in range(opt.num_source)], axis=0
             )
@@ -170,6 +168,7 @@ class Model(object):
             self.build_rigid_flow_warping()
             self.build_losses()
         else:
+            self.tgt_image = self.preprocess_image(self.tgt_image_input)
             # building model in eval mode
             tf.logging.info("Building eval model")
             self.pred_depth = self.build_dispnet()
@@ -246,13 +245,13 @@ class Model(object):
         # build dispnet_inputs
         if self.mode == 'eval':
             # for test_depth mode we only predict the depth of the target image
-            self.dispnet_inputs = self.tgt_image_aug
+            self.dispnet_inputs = self.tgt_image
         else:
             # multiple depth predictions; tgt: disp[:bs,:,:,:] src.i: disp[bs*(i+1):bs*(i+2),:,:,:]
-            self.dispnet_inputs = self.tgt_image_aug
+            self.dispnet_inputs = self.tgt_image
             for i in range(opt.num_source):
                 self.dispnet_inputs = tf.concat(
-                    [self.dispnet_inputs, self.src_image_stack_aug[:, :, :, 3 * i:3 * (i + 1)]], axis=0
+                    [self.dispnet_inputs, self.src_image_stack[:, :, :, 3 * i:3 * (i + 1)]], axis=0
                 )
 
         self.pred_disp = disp_net(opt, self.dispnet_inputs, self.is_training)
@@ -272,7 +271,7 @@ class Model(object):
     def build_posenet(self):
         opt = self.hparams
         # build posenet_inputs
-        self.posenet_inputs = tf.concat([self.tgt_image_aug, self.src_image_stack_aug], axis=3)
+        self.posenet_inputs = tf.concat([self.tgt_image, self.src_image_stack], axis=3)
         pred_poses = pose_net(opt, self.posenet_inputs, self.is_training)
         return pred_poses
 
