@@ -268,6 +268,7 @@ def run_epoch_training(
     steps_per_epoch = int(train_size / model.hparams.batch_size)
     tf.logging.info('steps per epoch: {}'.format(steps_per_epoch))
     curr_step = session.run(model.global_step)
+    tf.logging.info("Current step: {}".format(curr_step))
     assert curr_step % steps_per_epoch == 0
 
     # Get the current learning rate for the model based on the current epoch
@@ -307,14 +308,13 @@ def run_epoch_training(
         # comet.ml log all the images and errors
         global_step = step + (steps_per_epoch * curr_epoch)
         if comet_exp is not None and global_step % model.hparams.log_iter == 0:
-            curr_batch_size = len(tgt_img)
             with comet_exp.train():  # train context for comet.ml logging into cloud
                 # train metrics
                 comet_exp.log_metric("total_loss", loss, step=global_step)
                 comet_exp.log_metric("lr", curr_lr, step=global_step)
 
                 # images
-                for b in range(0, curr_batch_size):
+                for b in range(0, model.hparams.max_outputs):
                     # create src1_tgt_src2 image
                     src1_tgt_src2 = np.concatenate(
                         (src_img_stack[b, :, :, :3], tgt_img[b, :, :, :], src_img_stack[b, :, :, 3:]), axis=1

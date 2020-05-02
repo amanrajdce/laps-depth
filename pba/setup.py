@@ -96,6 +96,11 @@ def create_parser(state):
         default=50,
         help="logs image dato to comet.ml cloud by this interval"
     )
+    parser.add_argument(
+        '--use_kitti_aug',
+        action='store_true',
+        help='use augmentation strategy from SIGNet for KITTI rather than using any aug policy'
+    )
 
     # Policy settings
     if state == 'train':
@@ -118,11 +123,6 @@ def create_parser(state):
             '--no_aug_policy',
             action='store_true',
             help='no augmentation policy at all, use kitti aug if enabled'
-        )
-        parser.add_argument(
-            '--use_kitti_aug',
-            action='store_true',
-            help='use augmentation strategy from SIGNet for KITTI rather than using any aug policy'
         )
         parser.add_argument(
             '--flatten',
@@ -191,7 +191,8 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         gradient_clipping_by_global_norm=FLAGS.grad_clipping,
         policy_dataset=FLAGS.policy_dataset,
         name=FLAGS.name,
-        log_iter=FLAGS.log_iter)
+        log_iter=FLAGS.log_iter,
+        restore=FLAGS.restore)
 
     if state == 'train':
         hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)

@@ -1,0 +1,57 @@
+apiVersion: batch/v1
+kind: Job # Deployment will automatically restart when killed. Use Pod if not needed 
+metadata:
+  labels:
+    k8s-app: research
+  generateName: amraj-pba-search # replace <your_name> with something that identifies you
+  namespace: ecewcsng 
+spec:
+  template:
+    metadata:
+      labels:
+        k8s-app: research
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: research
+        image: amanraj42/tensorflow-gpu-ray:v1.11
+        imagePullPolicy: Always
+        workingDir: /ceph/amanraj/codes/pba-signet
+        command: ["/bin/bash", "scripts/search.sh"] # replace this with your own job execution scripts
+        resources:
+          requests:
+            memory: "24Gi"
+            cpu: "8"
+            nvidia.com/gpu: 4
+          limits:
+            memory: "48Gi"
+            cpu: "10"
+            nvidia.com/gpu: 4 # requesting X GPU
+        volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /ceph
+          name: ceph
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+      - name: ceph
+        flexVolume:
+          driver: ceph.rook.io/rook
+          fsType: ceph
+          options:
+            clusterNamespace: rook
+            fsName: nautilusfs
+            path: /ecewcsng
+            mountUser: ecewcsng
+            mountSecret: ceph-fs-secret
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: gpu-type
+                operator: In # Use NotIn for other types
+                values:
+                - 1080Ti

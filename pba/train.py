@@ -82,7 +82,7 @@ def main(_):
     if FLAGS.restore:
         train_spec["restore"] = FLAGS.restore
 
-    ray.init()
+    ray.init(webui_host='127.0.0.1')
     run_experiments({FLAGS.name: train_spec})
 
 
