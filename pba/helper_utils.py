@@ -53,7 +53,7 @@ def eval_child_model(session, model, epoch, test_files, comet_exp=None):
     Args:
         session: TensorFlow session the model will be run with.
         model: TensorFlow model that will be evaluated.
-        epoch: epoch number at which evaluation is done
+        epoch: current epoch of model on which being evaluated
         test_files: list of testing files
         comet_exp: comet.ml experiment name to write log to
 
@@ -68,6 +68,9 @@ def eval_child_model(session, model, epoch, test_files, comet_exp=None):
     input_width = model.input_width
     tf.logging.info('model.test_batch_size is {}'.format(batch_size))
 
+    steps_per_epoch = int(model.hparams.train_size / model.hparams.batch_size)
+    global_step = steps_per_epoch * (epoch + 1)
+
     preds_all = []
     for t in range(0, len(test_files), batch_size):
         inputs = np.zeros((batch_size, input_height, input_width, 3))
@@ -80,7 +83,7 @@ def eval_child_model(session, model, epoch, test_files, comet_exp=None):
             fh = open(test_files[idx], 'rb')
             raw_im = pil.open(fh)
             scaled_im = raw_im.resize((input_width, input_height), pil.ANTIALIAS)
-            inputs[b] = np.array(scaled_im)
+            inputs[b] = np.array(scaled_im, dtype='float32') / 255.0
 
         preds = session.run(
             model.pred_depth[0],
@@ -101,12 +104,12 @@ def eval_child_model(session, model, epoch, test_files, comet_exp=None):
                     # input image
                     comet_exp.log_image(
                         inputs[b, :, :, :], name="test_iter" + str(step) + "_input",
-                        image_format="png", image_channels="last", step=epoch
+                        image_format="png", image_channels="last", step=global_step
                     )
                     # prediction
                     comet_exp.log_image(
-                        preds[b, :, :, :], name="test_iter" + str(step) + "_pred",
-                        image_format="png", image_colormap="plasma", image_channels="last", step=epoch
+                        preds[b, :, :, :], name="test_iter" + str(step) + "_pred", image_format="png",
+                        image_colormap="plasma", image_channels="last", step=global_step
                     )
 
     assert len(preds_all) == len(test_files)
@@ -269,7 +272,7 @@ def run_epoch_training(
     tf.logging.info('steps per epoch: {}'.format(steps_per_epoch))
     curr_step = session.run(model.global_step)
     tf.logging.info("Current step: {}".format(curr_step))
-    assert curr_step % steps_per_epoch == 0
+    # assert curr_step % steps_per_epoch == 0
 
     # Get the current learning rate for the model based on the current epoch
     curr_lr = get_lr(curr_epoch, model.hparams, train_size, iteration=0)

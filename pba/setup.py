@@ -192,12 +192,12 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         policy_dataset=FLAGS.policy_dataset,
         name=FLAGS.name,
         log_iter=FLAGS.log_iter,
-        restore=FLAGS.restore)
+        restore=FLAGS.restore,
+        use_kitti_aug=FLAGS.use_kitti_aug)
 
     if state == 'train':
         hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)
         hparams.add_hparam('use_hp_policy', FLAGS.use_hp_policy)
-        hparams.add_hparam('use_kitti_aug', FLAGS.use_kitti_aug)
         if FLAGS.use_hp_policy:
             if FLAGS.hp_policy == 'random':
                 tf.logging.info('RANDOM SEARCH')
@@ -219,7 +219,6 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
             hparams.add_hparam('flatten', FLAGS.flatten)
     elif state == 'search':
         hparams.add_hparam('no_aug_policy', False)
-        hparams.add_hparam('use_kitti_aug', False)
         hparams.add_hparam('use_hp_policy', True)
         # default start value of 0
         hparams.add_hparam('hp_policy', [0 for _ in range(4 * NUM_HP_TRANSFORM)])

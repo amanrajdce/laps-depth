@@ -11,7 +11,7 @@ train_file_path="$kitti_root/train_lite5000.txt"
 test_file_path="$kitti_raw/test_files_eigen.txt"
 gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-name="search_train_lite_new"
+name="search_train_lite_new_5000"
 
 python pba/search.py \
   --local_dir "$local_dir" \

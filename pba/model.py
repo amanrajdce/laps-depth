@@ -45,8 +45,6 @@ class ModelTrainer(object):
         self._session = None
         self.hparams = hparams
         self.comet_exp = comet_exp
-        if self.comet_exp is not None:
-            self.comet_exp.log_parameters(self.hparams.values())
 
         # Initialize the dataset and dataloader
         np.random.seed(0)
@@ -57,6 +55,10 @@ class ModelTrainer(object):
         # Loading gt data and files for test set
         self.test_files = self.read_test_files(self.hparams.kitti_raw)
         self.gt_depths = self.setup_evaluation(self.hparams.gt_path)
+        self.hparams.add_hparam('train_size', self.train_size)
+
+        if self.comet_exp is not None:
+            self.comet_exp.log_parameters(self.hparams.values())
 
         # extra stuff for ray
         self._build_models()
