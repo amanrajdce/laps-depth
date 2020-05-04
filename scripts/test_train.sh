@@ -7,26 +7,27 @@ data_root="/ceph/amanraj/data"
 
 kitti_root="$data_root/kitti_processed"
 kitti_raw="$data_root/kitti_raw"
-train_file_path="$kitti_root/train_lite5000.txt"
 test_file_path="$kitti_raw/test_files_eigen.txt"
 gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-name="search_train_lite_5000"
+train_file_path="$kitti_root/train_test.txt"
 
-python pba/search.py \
+name="test"
+
+python pba/train.py \
   --local_dir "$local_dir" \
   --kitti_root "$kitti_root" \
   --kitti_raw "$kitti_raw" \
   --train_file_path "$train_file_path" \
   --test_file_path "$test_file_path" \
   --gt_path "$gt_path" \
-  --batch_size 8 --lr 0.0002 --lr_decay step \
-  --checkpoint_freq 0 \
-  --gpu 1 --cpu 2 --epochs 30 --num_samples 3 \
-  --perturbation_interval 5 --log_iter 250 \
-  --scale_normalize --name "$name"
+  --batch_size 8 --lr 0.0002 --num_workers 12 \
+  --checkpoint_freq 1 --gpu 1 --cpu 4 --epochs 1 \
+  --scale_normalize --log_iter 20 \
+  --no_aug_policy --use_kitti_aug --name "$name"
 
-# SIGNet was trained for approx 35 epochs.
-# batch_size=4, lr=0.0002, no lr_decay
+#--lr_decay step
+# SIGNet was trained for approx 25 epochs.
+# batch_size=8, lr=0.0002, no lr_decay
 
-# CUDA_VISIBLE_DEVICES=1,2,3 bash ./scripts/search.sh
+#CUDA_VISIBLE_DEVICES=3 bash ./scripts/test_train.sh

@@ -46,14 +46,14 @@ def compute_errors(gt, pred):
     return abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3
 
 
-def eval_child_model(session, model, epoch, test_files, comet_exp=None):
+def eval_child_model(session, model, curr_epoch, test_files, comet_exp=None):
     """
     Evaluates `model` on held out data depending on `mode`.
 
     Args:
         session: TensorFlow session the model will be run with.
         model: TensorFlow model that will be evaluated.
-        epoch: current epoch of model on which being evaluated
+        curr_epoch: current epoch of model on which being evaluated
         test_files: list of testing files
         comet_exp: comet.ml experiment name to write log to
 
@@ -67,9 +67,6 @@ def eval_child_model(session, model, epoch, test_files, comet_exp=None):
     input_height = model.input_height
     input_width = model.input_width
     tf.logging.info('model.test_batch_size is {}'.format(batch_size))
-
-    steps_per_epoch = int(model.hparams.train_size / model.hparams.batch_size)
-    global_step = steps_per_epoch * (epoch + 1)
 
     preds_all = []
     for t in range(0, len(test_files), batch_size):
@@ -104,12 +101,12 @@ def eval_child_model(session, model, epoch, test_files, comet_exp=None):
                     # input image
                     comet_exp.log_image(
                         inputs[b, :, :, :], name="test_iter" + str(step) + "_input",
-                        image_format="png", image_channels="last", step=global_step
+                        image_format="png", image_channels="last", step=curr_epoch
                     )
                     # prediction
                     comet_exp.log_image(
                         preds[b, :, :, :], name="test_iter" + str(step) + "_pred", image_format="png",
-                        image_colormap="plasma", image_channels="last", step=global_step
+                        image_colormap="plasma", image_channels="last", step=curr_epoch
                     )
 
     assert len(preds_all) == len(test_files)

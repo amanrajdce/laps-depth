@@ -71,14 +71,15 @@ def main(_):
         config["hp_policy"] = new_params
         return config
 
-    ray.init()
+    ray.init(webui_host='127.0.0.1')
 
     pbt = PopulationBasedTraining(
         time_attr="training_iteration",
         reward_attr="abs_rel",
         perturbation_interval=FLAGS.perturbation_interval,
         custom_explore_fn=explore,
-        log_config=True)
+        log_config=True
+    )
 
     run_experiments(
         {

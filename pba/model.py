@@ -187,10 +187,10 @@ class ModelTrainer(object):
 
         return gt_depths
 
-    def run_evaluation(self, pred_depths, epoch):
+    def run_evaluation(self, pred_depths, epoch, verbose=True):
         results = helper_utils.run_evaluation(
             self.gt_depths, pred_depths, epoch, min_depth=self.hparams.min_depth,
-            max_depth=self.hparams.max_depth, verbose=True, comet_exp=self.comet_exp
+            max_depth=self.hparams.max_depth, verbose=verbose, comet_exp=self.comet_exp
         )
         return results
 

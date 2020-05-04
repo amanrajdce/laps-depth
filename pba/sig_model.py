@@ -13,7 +13,7 @@ class Model(object):
         self.hparams = hparams
         self.input_height = hparams.input_height
         self.input_width = hparams.input_width
-        assert mode in ['train', 'eval']
+        assert mode in ['train', 'eval', 'test']
         self.is_training = True if mode == "train" else False
         self.mode = mode
 
@@ -27,8 +27,8 @@ class Model(object):
     def _setup_misc(self, mode):
         """Sets up miscellaneous in the model constructor."""
         self.lr_rate_ph = tf.Variable(0.0, name='lrn_rate', trainable=False)
-        self.reuse = None if (mode == 'train') else True
-        self.batch_size = self.hparams.batch_size
+        if mode == "train":
+            self.batch_size = self.hparams.batch_size
         self.test_batch_size = self.hparams.test_batch_size
 
     def _setup_images_and_intrinsic(self, mode):
@@ -68,7 +68,7 @@ class Model(object):
         # Setup checkpointing for this child model
         # Keep 2 or more checkpoints around during training.
         with tf.device('/cpu:0'):
-            self.saver = tf.train.Saver(max_to_keep=10)
+            self.saver = tf.train.Saver(max_to_keep=30)
 
         self.init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
@@ -243,16 +243,16 @@ class Model(object):
         opt = self.hparams
 
         # build dispnet_inputs
-        if self.mode == 'eval':
-            # for test_depth mode we only predict the depth of the target image
-            self.dispnet_inputs = self.tgt_image
-        else:
+        if self.mode == "train":
             # multiple depth predictions; tgt: disp[:bs,:,:,:] src.i: disp[bs*(i+1):bs*(i+2),:,:,:]
             self.dispnet_inputs = self.tgt_image
             for i in range(opt.num_source):
                 self.dispnet_inputs = tf.concat(
                     [self.dispnet_inputs, self.src_image_stack[:, :, :, 3 * i:3 * (i + 1)]], axis=0
                 )
+        else:
+            # for eval/test depth mode we only predict the depth of the target image
+            self.dispnet_inputs = self.tgt_image
 
         self.pred_disp = disp_net(opt, self.dispnet_inputs, self.is_training)
         if opt.scale_normalize:

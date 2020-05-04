@@ -1,4 +1,5 @@
 #!/bin/bash
+
 export PYTHONPATH="$(pwd)"
 export COMET_DISABLE_AUTO_LOGGING=1
 
@@ -11,10 +12,9 @@ train_file_path="$kitti_root/train.txt"
 test_file_path="$kitti_raw/test_files_eigen.txt"
 gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-name="train_full_hp_no_grad_clipping"
+name="train_full_hp_search"
 #hp_policy="$PWD/schedules/rcifar10_16_kitti.txt"
-result_dir="/media/ehdd_2t/amanraj/results"
-hp_policy="$result_dir/search_train_lite_no_grad_clipping/pbt_global.txt"
+hp_policy="$local_dir/search_train_lite_5000/pbt_global.txt"
 
 python pba/train.py \
   --local_dir "$local_dir" \
@@ -23,11 +23,12 @@ python pba/train.py \
   --train_file_path "$train_file_path" \
   --test_file_path "$test_file_path" \
   --gt_path "$gt_path" \
-  --batch_size 8 --lr 0.0002 \
-  --checkpoint_freq 1 --gpu 1 --cpu 3 --epochs 30 \
-  --enable_batch_norm --scale_normalize --grad_clipping 0.0 \
-  --use_hp_policy --hp_policy "$hp_policy" --hp_policy_epochs 40 \
-  --name "$name"
+  --batch_size 8 --lr 0.0002 --lr_decay step \
+  --checkpoint_freq 1 --gpu 1 --cpu 2 --epochs 30 \
+  --name "$name" --scale_normalize \
+  --use_hp_policy --hp_policy "$hp_policy" --hp_policy_epochs 30
+
 
 # SIGNet was trained for approx 35 epochs.
 # batch_size=4, lr=0.0002, no lr_decay
+# CUDA_VISIBLE_DEVICES=1 bash ./scripts/train_hp.sh
