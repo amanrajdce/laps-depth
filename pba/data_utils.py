@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import copy
+import sys
 try:
     import cPickle as pickle
 except:
@@ -28,6 +28,7 @@ import random
 import numpy as np
 import tensorflow as tf
 import cv2
+import ray
 import torch
 import torch.utils.data as data
 
@@ -56,7 +57,7 @@ class PairedData(object):
 
 class ImageFolderKITTI(data.Dataset):
     def __init__(
-        self, data_root, train_file_path, input_height, input_width,
+        self, data_root, train_file_path, input_height, input_width, load_all=False
     ):
         """
         :param data_root: dataset root
@@ -73,6 +74,9 @@ class ImageFolderKITTI(data.Dataset):
         self.image_list = self.data['image_file_list']
         self.cam_list = self.data['cam_file_list']
         assert len(self.image_list) == len(self.cam_list)
+        self.load_all = load_all
+        if self.load_all:
+            self.image_list, self.cam_list = self.load_all_at_once()
 
     def read_image_data_for_input(self, img_path):
         """
@@ -128,11 +132,27 @@ class ImageFolderKITTI(data.Dataset):
 
         return intrinsic
 
+    def load_all_at_once(self):
+        image_list = []
+        cam_list = []
+        for index in range(0, len(self.image_list)):
+            img_path = self.image_list[index]
+            tgt_img, src_img_1, src_img_2 = self.read_image_data_for_input(img_path)
+            image_list.append((tgt_img, src_img_1, src_img_2))
+            cam_path = self.cam_list[index]
+            cam_list.append(self.read_cam_data(cam_path))
+
+        return image_list, cam_list
+
     def __getitem__(self, index):
-        img_path = self.image_list[index]
-        cam_path = self.cam_list[index]
-        tgt_img, src_img_1, src_img_2 = self.read_image_data_for_input(img_path)
-        intrinsic = self.read_cam_data(cam_path)
+        if self.load_all:
+            tgt_img, src_img_1, src_img_2 = self.image_list[index]
+            intrinsic = self.cam_list[index]
+        else:
+            img_path = self.image_list[index]
+            cam_path = self.cam_list[index]
+            tgt_img, src_img_1, src_img_2 = self.read_image_data_for_input(img_path)
+            intrinsic = self.read_cam_data(cam_path)
 
         return tgt_img, src_img_1, src_img_2, intrinsic
 
@@ -166,16 +186,20 @@ class TrainDataSet(object):
         self.input_width = hparams.input_width
 
         # parsing initial policy for data augmentation
+        self.good_policies = None
+        self.augmentation_transforms = None
+        self.policy = None
         self.parse_policy(hparams)
+
         dataset = ImageFolderKITTI(
             self.hparams.kitti_root, self.hparams.train_file_path,
-            self.hparams.input_height, self.hparams.input_width
+            self.hparams.input_height, self.hparams.input_width, self.hparams.load_all
         )
+        self.train_size = len(dataset)
         data_loader = torch.utils.data.DataLoader(
             dataset, batch_size=self.hparams.batch_size, shuffle=shuffle,
             num_workers=self.hparams.num_workers, drop_last=True
         )
-        self.train_size = len(dataset)
         self.paired_data = PairedData(data_loader)
         tf.logging.info('Train dataset size: {}'.format(len(dataset)))
 
@@ -335,7 +359,123 @@ class TrainDataSet(object):
 
         return tgt_img_batch, src_img_stack_batch, intrinsic_batch
 
+    def augment_batch_parallel(self, tgt_img_batch, src_img_1_batch, src_img_2_batch, intrinsic_batch, iteration=None):
+        """
+        Apply augmentation on given batch of data in parallel using ray
+        :param tgt_img_batch:  target image batch
+        :param src_img_1_batch: srch_image1 batch
+        :param src_img_2_batch: src_image2 batch
+        :param intrinsic_batch: intrinsic matrix batch
+        :param iteration: current iteration number
+        :return: augmented batch
+        """
+        assert len(tgt_img_batch) == len(src_img_1_batch) == len(src_img_2_batch) == len(intrinsic_batch)
+        batch_size = len(tgt_img_batch)
+        res = ray.get([
+            augment_sample.remote(
+                tgt_img_batch[idx, ...],
+                src_img_1_batch[idx, ...],
+                src_img_2_batch[idx, ...],
+                intrinsic_batch[idx, ...],
+                iteration,
+                self.hparams.no_aug_policy,
+                self.hparams.use_hp_policy,
+                self.good_policies,
+                self.policy,
+                self.augmentation_transforms,
+                self.input_height,
+                self.input_width,
+                self.hparams.flatten
+            ) for idx in range(0, batch_size)
+        ])
+
+        assert len(res) == batch_size
+        tgt_img_aug = []
+        src_img_stack_aug = []
+        intrinsic = []
+        for idx in range(0, batch_size):
+            tgt_, src_img_stack_, intrinsic_ = res[idx]
+            tgt_img_aug.append(tgt_)
+            src_img_stack_aug.append(src_img_stack_)
+            intrinsic.append(intrinsic_)
+
+        tgt_img_aug = np.array(tgt_img_aug, np.float32)
+        src_img_stack_aug = np.array(src_img_stack_aug, np.float32)
+        intrinsic = np.array(intrinsic, np.float32)
+
+        return tgt_img_aug, src_img_stack_aug, intrinsic
+
     def load_data(self):
         return self.paired_data
+
+
+@ray.remote
+def augment_sample(
+        tgt_img, src_img_1, src_img_2, intrinsic, iteration, no_aug_policy, use_hp_policy,
+        good_policies, policy, augmentation_transforms, input_height, input_width, flatten,
+):
+    """
+    Apply augmentation on given sample
+    :param tgt_img:
+    :param src_img_1:
+    :param src_img_2:
+    :param intrinsic:
+    :param iteration:
+    :param no_aug_policy:
+    :param use_hp_policy:
+    :param good_policies:
+    :param policy:
+    :param augmentation_transforms:
+    :param input_height:
+    :param input_width:
+    :param flatten:
+    :return:
+    """
+    # convert pytorch tensors back to numpy
+    tgt_img = tgt_img.numpy()
+    src_img_1 = src_img_1.numpy()
+    src_img_2 = src_img_2.numpy()
+    intrinsic = intrinsic.numpy()
+
+    if not no_aug_policy:
+        if not use_hp_policy:
+            # apply autoaugment policy here modified for KITTI
+            epoch_policy = good_policies[np.random.choice(len(good_policies))]
+            tgt_img, src_img_1, src_img_2, intrinsic = augmentation_transforms.apply_policy(
+                policy=epoch_policy, data=[tgt_img, src_img_1, src_img_2, intrinsic],
+                image_size=(input_height, input_width)
+            )
+        else:
+            # apply PBA policy modified for KITTI
+            if isinstance(policy[0], list):
+                # single policy
+                if flatten:
+                    tgt_img, src_img_1, src_img_2, intrinsic = augmentation_transforms.apply_policy(
+                        policy=policy[random.randint(0, len(policy) - 1)],
+                        data=[tgt_img, src_img_1, src_img_2, intrinsic],
+                        image_size=(input_height, input_width)
+                    )
+                else:
+                    tgt_img, src_img_1, src_img_2, intrinsic = augmentation_transforms.apply_policy(
+                        policy=policy[iteration],
+                        data=[tgt_img, src_img_1, src_img_2, intrinsic],
+                        image_size=(input_height, input_width)
+                    )
+            elif isinstance(policy, list):
+                # policy schedule
+                tgt_img, src_img_1, src_img_2, intrinsic = augmentation_transforms.apply_policy(
+                    policy=policy, data=[tgt_img, src_img_1, src_img_2, intrinsic],
+                    image_size=(input_height, input_width)
+                )
+            else:
+                raise ValueError('Unknown policy.')
+    else:
+        # no data augmentation policy
+        pass
+
+    # convert source image into (B, H, W, 3*2)
+    src_img_stack = np.concatenate((src_img_1, src_img_2), axis=-1)
+
+    return tgt_img, src_img_stack, intrinsic
 
 

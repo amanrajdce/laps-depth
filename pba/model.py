@@ -155,7 +155,7 @@ class ModelTrainer(object):
             try:
                 helper_utils.run_epoch_training(
                     self.session, self.m, self.data_loader, self.train_size,
-                    self.dataset.augment_batch, curr_epoch, self.comet_exp
+                    self.dataset.augment_batch_parallel, curr_epoch, self.comet_exp  ##
                 )
                 break
             except (tf.errors.AbortedError, tf.errors.UnavailableError) as e:

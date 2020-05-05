@@ -44,6 +44,11 @@ def create_parser(state):
         default=0,
         help='Number of threads for data loading, set zero to disable multiprocessing'
     )
+    parser.add_argument(
+        '--load_all',
+        action='store_true',
+        help="if enabled load all train data into memory at once"
+    )
     parser.add_argument('--min_depth', type=float, default=1e-3, help="threshold for minimum depth for evaluation")
     parser.add_argument('--max_depth', type=float, default=80, help="threshold for maximum depth for evaluation")
 
@@ -193,7 +198,8 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         name=FLAGS.name,
         log_iter=FLAGS.log_iter,
         restore=FLAGS.restore,
-        use_kitti_aug=FLAGS.use_kitti_aug)
+        use_kitti_aug=FLAGS.use_kitti_aug,
+        load_all=FLAGS.load_all)
 
     if state == 'train':
         hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)

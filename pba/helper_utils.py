@@ -264,8 +264,8 @@ def run_epoch_training(
     Returns:
         The accuracy of 'model' on the training set
     """
-
-    steps_per_epoch = int(train_size / model.hparams.batch_size)
+    batch_size = model.hparams.batch_size
+    steps_per_epoch = int(train_size / batch_size)
     tf.logging.info('steps per epoch: {}'.format(steps_per_epoch))
     curr_step = session.run(model.global_step)
     tf.logging.info("Current step: {}".format(curr_step))
