@@ -36,23 +36,6 @@ import pba.augmentation_transforms_hp as augmentation_transforms_pba
 import pba.augmentation_transforms as augmentation_transforms_autoaug
 
 
-class PairedData(object):
-    def __init__(self, data_loader):
-        self.data_loader = data_loader
-        self.data_loader_iter = iter(self.data_loader)
-        self.iter = 0
-
-    def __iter__(self):
-        self.data_loader_iter = iter(self.data_loader)
-        self.iter = 0
-        return self
-
-    def __next__(self):
-        self.iter += 1
-        tgt_img, src_img_1, src_img_2, intrinsic = next(self.data_loader_iter)
-        return tgt_img, src_img_1, src_img_2, intrinsic
-
-
 class ImageFolderKITTI(object):
     def __init__(
         self, data_root, train_file_path, input_height, input_width, load_all=False
@@ -326,20 +309,20 @@ def augment_sample(
         good_policies, policy, augmentation_transforms, input_height, input_width, flatten,
 ):
     """
-    :param sample_idx:
-    :param iteration:
-    :param data_loader:
-    :param no_aug_policy:
-    :param use_hp_policy:
-    :param good_policies:
-    :param policy:
-    :param augmentation_transforms:
-    :param input_height:
-    :param input_width:
-    :param flatten:
-    :return:
+    :param sample_idx: index of sample to be read
+    :param iteration: current epoch of model
+    :param data_loader: dataloader implementing __getitem__
+    :param no_aug_policy: whether to use any policy or not
+    :param use_hp_policy: whether to use hp policy or not
+    :param good_policies: autoaugment policy
+    :param policy: parsed policy
+    :param augmentation_transforms: augmentation function
+    :param input_height: height of input image
+    :param input_width: width of input image
+    :param flatten: randomly select an aug policy from schedule
+    :return: return original and augmented sample
     """
-    # convert pytorch tensors back to numpy
+    # read sample from disk
     tgt_img, src_img_1, src_img_2, intrinsic = data_loader[sample_idx]
 
     if not no_aug_policy:
