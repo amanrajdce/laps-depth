@@ -22,7 +22,7 @@ python pba/train.py \
   --train_file_path "$train_file_path" \
   --test_file_path "$test_file_path" \
   --gt_path "$gt_path" \
-  --batch_size 8 --lr 0.0002 --num_workers 0 --load_all \
+  --batch_size 8 --lr 0.0002 \
   --checkpoint_freq 1 --gpu 1 --cpu 2 --epochs 30 \
   --scale_normalize --log_iter 20 \
   --use_kitti_aug --name "$name" \

@@ -46,12 +46,10 @@ class ModelTrainer(object):
         self.hparams = hparams
         self.comet_exp = comet_exp
 
-        # Initialize the dataset and dataloader
-        np.random.seed(0)
         self.dataset = data_utils.TrainDataSet(hparams, shuffle=True)
         self.train_size = self.dataset.train_size
         self.data_loader = self.dataset.load_data()
-        np.random.seed()  # Put the random seed back to random
+
         # Loading gt data and files for test set
         self.test_files = self.read_test_files(self.hparams.kitti_raw)
         self.gt_depths = self.setup_evaluation(self.hparams.gt_path)
@@ -154,8 +152,7 @@ class ModelTrainer(object):
         while True:
             try:
                 helper_utils.run_epoch_training(
-                    self.session, self.m, self.data_loader, self.train_size,
-                    self.dataset.augment_batch_parallel, curr_epoch, self.comet_exp  ##
+                    self.session, self.m, self.dataset, self.train_size, curr_epoch, self.comet_exp
                 )
                 break
             except (tf.errors.AbortedError, tf.errors.UnavailableError) as e:

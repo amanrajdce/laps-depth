@@ -39,12 +39,6 @@ def create_parser(state):
         help='.npy file containing ground truth depth for kitti eigen test files'
     )
     parser.add_argument(
-        '--num_workers',
-        type=int,
-        default=0,
-        help='Number of threads for data loading, set zero to disable multiprocessing'
-    )
-    parser.add_argument(
         '--load_all',
         action='store_true',
         help="if enabled load all train data into memory at once"
@@ -175,7 +169,6 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         train_file_path=FLAGS.train_file_path,
         test_file_path=FLAGS.test_file_path,
         gt_path=FLAGS.gt_path,
-        num_workers=FLAGS.num_workers,
         min_depth=FLAGS.min_depth,
         max_depth=FLAGS.max_depth,
         batch_size=FLAGS.batch_size,
