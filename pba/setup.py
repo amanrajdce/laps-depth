@@ -192,7 +192,8 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         log_iter=FLAGS.log_iter,
         restore=FLAGS.restore,
         use_kitti_aug=FLAGS.use_kitti_aug,
-        load_all=FLAGS.load_all)
+        load_all=FLAGS.load_all,
+        flatten=FLAGS.flatten)
 
     if state == 'train':
         hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)
@@ -215,7 +216,6 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
                 parsed_policy = [int(p) for p in parsed_policy]
             hparams.add_hparam('hp_policy', parsed_policy)
             hparams.add_hparam('hp_policy_epochs', FLAGS.hp_policy_epochs)
-            hparams.add_hparam('flatten', FLAGS.flatten)
     elif state == 'search':
         hparams.add_hparam('no_aug_policy', False)
         hparams.add_hparam('use_hp_policy', True)
