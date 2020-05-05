@@ -249,14 +249,14 @@ def get_lr(curr_epoch, hparams, train_size, iteration=None):
 
 
 def run_epoch_training(
-        session, model, data_loader, train_size, batch_aug_fn, curr_epoch, comet_exp=None
+        session, model, dataset, train_size, curr_epoch, comet_exp=None
 ):
     """Runs one epoch of training for the model passed in.
 
     Args:
         session: TensorFlow session the model will be run with.
         model: TensorFlow model that will be evaluated.
-        data_loader: DataSet object that contains data that `model` will evaluate.
+        dataset: DataSet object that contains train data that `model` will train on
         curr_epoch: How many of epochs of training have been done so far.
         train_size: Size of training set
         comet_exp: comet.ml experiment name to write log to
@@ -264,6 +264,7 @@ def run_epoch_training(
     Returns:
         The accuracy of 'model' on the training set
     """
+    global_seed = 8964
     batch_size = model.hparams.batch_size
     steps_per_epoch = int(train_size / batch_size)
     tf.logging.info('steps per epoch: {}'.format(steps_per_epoch))
@@ -275,20 +276,28 @@ def run_epoch_training(
     curr_lr = get_lr(curr_epoch, model.hparams, train_size, iteration=0)
     tf.logging.info('lr of {} for epoch {}'.format(curr_lr, curr_epoch))
 
+    # shuffle training indexes to form batch
+    # drop last indexes that dont form full batch
+    np.random.seed(global_seed + curr_epoch)
+    train_indxs = list(range(0, train_size))
+    np.random.shuffle(train_indxs)
+    train_indxs = train_indxs[: steps_per_epoch*batch_size]
+
     # train for one epoch
-    for step, batch in enumerate(data_loader):
+    for step in range(0, steps_per_epoch):
         curr_lr = get_lr(curr_epoch, model.hparams, train_size, iteration=(step + 1))
         # Update the lr rate variable to the current LR.
         model.lr_rate_ph.load(curr_lr, session=session)
         if step % 20 == 0:
             tf.logging.info('Training {}/{}'.format(step, steps_per_epoch))
 
-        # original read input from disk
-        tgt_img, src_img_1, src_img_2, intrinsic = batch
-        src_img_stack = np.concatenate((src_img_1, src_img_2), axis=-1)
+        # get batch_indexes
+        start_idx = step*batch_size
+        end_idx = start_idx + batch_size
+        batch_indxs = train_indxs[start_idx: end_idx]
 
-        # augmented input from policy methods
-        tgt_img_aug, src_img_stack_aug, intrinsic = batch_aug_fn(tgt_img, src_img_1, src_img_2, intrinsic, curr_epoch)
+        # get original batch as well as augmented from policy methods
+        tgt_img, src_img_stack, tgt_img_aug, src_img_stack_aug, intrinsic = dataset.next_batch(batch_indxs, curr_epoch)
 
         _, step, preds, tgt_img_final, src_img_stack_final, fwd_warp, fwd_error, bwd_warp, bwd_error, loss = \
             session.run(
