@@ -11,9 +11,9 @@ test_file_path="$kitti_raw/test_files_eigen.txt"
 gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
 train_file_path="$kitti_root/train.txt"
-restore="$local_dir/train_full_signet_bsl/RayModel_0_2020-04-29_18-09-224499y9i7/checkpoint_30/model.ckpt-30"
+# restore="$local_dir/train_full_signet_bsl/RayModel_0_2020-04-29_18-09-224499y9i7/checkpoint_30/model.ckpt-30"
 
-name="train_full_signet_bsl"
+name="train_full_signet_bsl_speedup_data_loading"
 
 python pba/train.py \
   --local_dir "$local_dir" \
@@ -22,13 +22,14 @@ python pba/train.py \
   --train_file_path "$train_file_path" \
   --test_file_path "$test_file_path" \
   --gt_path "$gt_path" \
-  --batch_size 8 --lr 0.00002 \
-  --checkpoint_freq 1 --gpu 1 --cpu 3 --epochs 31 --restore $restore \
+  --batch_size 8 --lr 0.0002 \
+  --checkpoint_freq 1 --gpu 1 --cpu 3 --epochs 30  --lr_decay step \
   --scale_normalize --log_iter 1000 \
   --no_aug_policy --use_kitti_aug --name "$name"
 
-#--lr_decay step
+#
+# --restore $restore
 # SIGNet was trained for approx 25 epochs.
 # batch_size=8, lr=0.0002, no lr_decay
 
-#CUDA_VISIBLE_DEVICES=0 bash ./scripts/train_signet_bsl.sh
+# CUDA_VISIBLE_DEVICES=3 bash ./scripts/train_signet_bsl.sh

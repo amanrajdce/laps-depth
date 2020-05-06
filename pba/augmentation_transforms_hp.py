@@ -53,8 +53,8 @@ def apply_policy(policy, data, image_size, verbose=False):
     """
     img_data = data[:-1]
     intrinsic = data[-1]
-    # Uses PBA cifar10 policy
-    count = np.random.choice([0, 1, 2, 3], p=[0.2, 0.3, 0.5, 0.0])
+    # PBA cifar10 policy modified
+    count = np.random.choice([0, 1, 2, 3], p=[0.10, 0.20, 0.30, 0.40])
 
     if count != 0:
         pil_img_data = pil_wrap(img_data)

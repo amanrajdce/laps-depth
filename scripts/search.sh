@@ -22,8 +22,8 @@ python pba/search.py \
   --gt_path "$gt_path" \
   --batch_size 8 --lr 0.0002 --lr_decay step \
   --checkpoint_freq 0 \
-  --gpu 1 --cpu 2 --epochs 30 --num_samples 3 \
-  --perturbation_interval 5 --log_iter 250 \
+  --gpu 1 --cpu 2 --epochs 35 --num_samples 4 \
+  --perturbation_interval 1 --log_iter 250 \
   --scale_normalize --name "$name"
 
 # SIGNet was trained for approx 35 epochs.

@@ -75,7 +75,7 @@ def main(_):
 
     pbt = PopulationBasedTraining(
         time_attr="training_iteration",
-        reward_attr="abs_rel",
+        reward_attr="abs_rel_acc",
         perturbation_interval=FLAGS.perturbation_interval,
         custom_explore_fn=explore,
         log_config=True

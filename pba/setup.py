@@ -123,14 +123,9 @@ def create_parser(state):
             action='store_true',
             help='no augmentation policy at all, use kitti aug if enabled'
         )
-        parser.add_argument(
-            '--flatten',
-            action='store_true',
-            help='randomly select an aug policy from schedule')
-        parser.add_argument('--name', type=str, default='pba kitti')
-
+        parser.add_argument('--name', type=str, default='training')
     elif state == 'search':
-        parser.add_argument('--perturbation_interval', type=int, default=10)
+        parser.add_argument('--perturbation_interval', type=int, default=1)
         parser.add_argument('--name', type=str, default='autoaug_pbt')
     else:
         raise ValueError('unknown state')
@@ -143,6 +138,10 @@ def create_parser(state):
         choices=('cifar10', 'svhn'),
         help='which augmentation policy to use in case of autoaugment'
     )
+    parser.add_argument(
+        '--flatten',
+        action='store_true',
+        help='randomly select an aug policy from schedule')
 
     args = parser.parse_args()
     tf.logging.info(str(args))
@@ -221,6 +220,7 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         hparams.add_hparam('use_hp_policy', True)
         # default start value of 0
         hparams.add_hparam('hp_policy', [0 for _ in range(4 * NUM_HP_TRANSFORM)])
+        hparams.add_hparam('perturbation_interval', FLAGS.perturbation_interval)
     else:
         raise ValueError('unknown state')
 

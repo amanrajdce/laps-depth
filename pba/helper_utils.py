@@ -161,24 +161,36 @@ def run_evaluation(gt_depths, pred_depths, curr_epoch, min_depth=1e-3, max_depth
             gt_depth[mask], pred_depth[mask]
         )
 
+    # compute mean of all errors and accuracies
+    abs_rel = abs_rel.mean()
+    sq_rel = sq_rel.mean()
+    rms = rms.mean()
+    log_rms = log_rms.mean()
+    d1_all = d1_all.mean()
+    a1 = a1.mean()
+    a2 = a2.mean()
+    a3 = a3.mean()
+    abs_rel_acc = 0. if abs_rel > 1. else 1. - abs_rel
+
     if verbose:
         tf.logging.info('Evaluating for errors took {:.4f} secs'.format(time.time() - t1))  # adapt to py3
-        tf.logging.info("{:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}".format(
-            'abs_rel', 'sq_rel', 'rms', 'log_rms', 'd1_all', 'a1', 'a2', 'a3')
+        tf.logging.info("{:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}".format(
+            'abs_rel_acc', 'abs_rel', 'sq_rel', 'rms', 'log_rms', 'd1_all', 'a1', 'a2', 'a3')
         )
-        tf.logging.info("{:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}".format(
-            abs_rel.mean(), sq_rel.mean(), rms.mean(), log_rms.mean(), d1_all.mean(), a1.mean(), a2.mean(), a3.mean())
+        tf.logging.info("{:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}".format(
+            abs_rel_acc, abs_rel, sq_rel, rms, log_rms, d1_all, a1, a2, a3)
         )
 
     results = {
-        "abs_rel": abs_rel.mean(),
-        "sq_rel": sq_rel.mean(),
-        "rms": rms.mean(),
-        "log_rms": log_rms.mean(),
-        "d1_all": d1_all.mean(),
-        "a1": a1.mean(),
-        "a2": a2.mean(),
-        "a3": a3.mean()
+        "abs_rel": abs_rel,
+        "abs_rel_acc": abs_rel_acc,
+        "sq_rel": sq_rel,
+        "rms": rms,
+        "log_rms": log_rms,
+        "d1_all": d1_all,
+        "a1": a1,
+        "a2": a2,
+        "a3": a3
     }
     if comet_exp is not None:
         with comet_exp.test():  # to provide context for comet.ml graphs
