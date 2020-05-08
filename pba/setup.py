@@ -66,6 +66,7 @@ def create_parser(state):
     parser.add_argument('--num_samples', type=int, default=1, help='number of Ray samples')
     parser.add_argument('--max_outputs', type=int, default=4, help='how many minibatch per images we want to save')
     parser.add_argument('--use_regularization', action='store_true', help='whether or not to use regularization term')
+    parser.add_argument('--optimizer', default='adam', choices=('adam', 'sgd'))
     parser.add_argument(
         '--dispnet_encoder',
         default='resnet50',
@@ -142,6 +143,11 @@ def create_parser(state):
         '--flatten',
         action='store_true',
         help='randomly select an aug policy from schedule')
+    parser.add_argument(
+        '--disable_comet',
+        action='store_true',
+        help='disable online logging in comet_ml'
+    )
 
     args = parser.parse_args()
     tf.logging.info(str(args))
@@ -192,7 +198,10 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         restore=FLAGS.restore,
         use_kitti_aug=FLAGS.use_kitti_aug,
         load_all=FLAGS.load_all,
-        flatten=FLAGS.flatten)
+        flatten=FLAGS.flatten,
+        disable_comet=FLAGS.disable_comet,
+        optimizer=FLAGS.optimizer,
+        local_dir=FLAGS.local_dir)
 
     if state == 'train':
         hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)

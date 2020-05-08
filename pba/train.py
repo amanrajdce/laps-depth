@@ -5,6 +5,7 @@ from __future__ import division
 from __future__ import print_function
 
 from comet_ml import Experiment
+from comet_ml import OfflineExperiment
 
 import os
 import ray
@@ -24,12 +25,21 @@ class RayModel(Trainable):
         tf.logging.set_verbosity(tf.logging.INFO)
         tf.logging.info("calling setup")
         self.hparams = tf.contrib.training.HParams(**self.config)
-        self.experiment = Experiment(
-            api_key="rY4zUJYxfKHYUlgAirQZy2190",
-            project_name=self.hparams.name, workspace="amanraj42"
-        )
+        if self.hparams.disable_comet:
+            tf.logging.info("Started logging offline for comet ml")
+            self.comet_experiment = OfflineExperiment(
+                project_name=self.hparams.name, workspace="amanraj42",
+                offline_directory=os.path.join(self.hparams.local_dir, self.hparams.name)
+            )
+        else:
+            tf.logging.info("Started logging to comet ml online")
+            self.comet_experiment = Experiment(
+                api_key="rY4zUJYxfKHYUlgAirQZy2190",
+                project_name=self.hparams.name, workspace="amanraj42"
+            )
+
         self.hparams = tf.contrib.training.HParams(**self.config)
-        self.trainer = ModelTrainer(self.hparams, comet_exp=self.experiment)
+        self.trainer = ModelTrainer(self.hparams, comet_exp=self.comet_experiment)
 
     # TODO, fix training, integrate KITTI evaluation
     def _train(self):
@@ -82,8 +92,15 @@ def main(_):
     if FLAGS.restore:
         train_spec["restore"] = FLAGS.restore
 
-    ray.init(webui_host='127.0.0.1')
+    ray.init(
+        webui_host='127.0.0.1',
+        memory=1024 * 1024 * 1024 * 25,  # setting 25 GB for ray workers
+        object_store_memory=1024 * 1024 * 1024 * 5,  # setting 5 GB object store
+        lru_evict=True
+    )
     run_experiments({FLAGS.name: train_spec})
+
+    ray.shutdown()
 
 
 if __name__ == "__main__":

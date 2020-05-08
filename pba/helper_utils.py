@@ -24,6 +24,8 @@ import PIL.Image as pil
 import cv2
 import time
 
+import gc
+
 
 def compute_errors(gt, pred):
     if np.size(gt) == 0:
@@ -253,7 +255,6 @@ def get_lr(curr_epoch, hparams, train_size, iteration=None):
         lr = cosine_lr(
             hparams.lr, curr_epoch, iteration, batches_per_epoch, hparams.num_epochs
         )
-        tf.logging.log_first_n(tf.logging.WARN, 'Default to cosine learning rate.', 1)
     else:
         raise ValueError("Unknown  lr decay policy!!")
 
@@ -372,6 +373,9 @@ def run_epoch_training(
                         fwd_bwd_warp_error, name="fwd_bwd_error_b" + str(b),
                         image_format="png", image_channels="last", step=global_step
                     )
+
+        # free up ray memory
+        gc.collect()
 
 
 

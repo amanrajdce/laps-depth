@@ -71,7 +71,12 @@ def main(_):
         config["hp_policy"] = new_params
         return config
 
-    ray.init(webui_host='127.0.0.1')
+    ray.init(
+        webui_host='127.0.0.1',
+        # memory=1024 * 1024 * 1024 * 20,    # setting 20 GB for ray workers
+        # object_store_memory=1024 * 1024 * 1024 * 30,
+        # lru_evict=True
+    )
 
     pbt = PopulationBasedTraining(
         time_attr="training_iteration",
@@ -88,6 +93,8 @@ def main(_):
         scheduler=pbt,
         reuse_actors=True,
         verbose=True)
+
+    ray.shutdown()
 
 
 if __name__ == "__main__":

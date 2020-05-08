@@ -46,7 +46,7 @@ class ModelTrainer(object):
         self.hparams = hparams
         self.comet_exp = comet_exp
 
-        self.dataset = data_utils.TrainDataSet(hparams, shuffle=True)
+        self.dataset = data_utils.TrainDataSet(hparams)
         self.train_size = self.dataset.train_size
         self.data_loader = self.dataset.load_data()
 

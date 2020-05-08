@@ -28,6 +28,7 @@ import random
 import numpy as np
 import tensorflow as tf
 import cv2
+import gc
 import ray
 
 import pba.policies as found_policies
@@ -155,7 +156,7 @@ def parse_policy(policy_emb, augmentation_transforms):
 class TrainDataSet(object):
     """Dataset object that produces augmented training data"""
 
-    def __init__(self, hparams, shuffle=False):
+    def __init__(self, hparams):
         """
         :param hparams: tf.hparams object
         """
@@ -260,21 +261,20 @@ class TrainDataSet(object):
         :return: original batch data as well as augmented
         """
         batch_size = len(indexes)
-        res = ray.get([
-            augment_sample.remote(
-                idx,
-                iteration,
-                self.data_loader,
-                self.hparams.no_aug_policy,
-                self.hparams.use_hp_policy,
-                self.good_policies,
-                self.policy,
-                self.augmentation_transforms,
-                self.input_height,
-                self.input_width,
-                self.hparams.flatten
-            ) for idx in indexes
-        ])
+        batch = [augment_sample.remote(
+            idx,
+            iteration,
+            self.data_loader,
+            self.hparams.no_aug_policy,
+            self.hparams.use_hp_policy,
+            self.good_policies,
+            self.policy,
+            self.augmentation_transforms,
+            self.input_height,
+            self.input_width,
+            self.hparams.flatten) for idx in indexes
+        ]
+        res = ray.get(batch)
 
         assert len(res) == batch_size
         tgt_img, tgt_img_aug = [], []
@@ -296,6 +296,15 @@ class TrainDataSet(object):
         tgt_img_aug = np.array(tgt_img_aug, np.float32)
         src_img_stack_aug = np.array(src_img_stack_aug, np.float32)
         intrinsic = np.array(intrinsic, np.float32)
+
+        # delete reference to object store to free memory
+        while len(batch) > 0:
+            del batch[-1]
+            del res[-1]
+
+        assert len(res) == len(batch) == 0
+        del res
+        del batch
 
         return tgt_img, src_img_stack, tgt_img_aug, src_img_stack_aug, intrinsic
 

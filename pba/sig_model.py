@@ -60,7 +60,6 @@ class Model(object):
         # Build train/eval model
         self.build_model()
         self._calc_num_trainable_params()
-        #sys.exit(-1)
 
         if self.is_training:
             self._build_train_op()
@@ -187,10 +186,16 @@ class Model(object):
         grads = tf.gradients(self.total_loss, tvars)
         if hparams.gradient_clipping_by_global_norm > 0.0:
             grads, norm = tf.clip_by_global_norm(grads, hparams.gradient_clipping_by_global_norm)
-            tf.summary.scalar('grad_norm', norm)
+            # tf.summary.scalar('grad_norm', norm)
 
         # Setup the initial learning rate
-        self.optimizer = tf.train.AdamOptimizer(self.lr_rate_ph, 0.9)
+        if self.hparams.optimizer == "sgd":
+            tf.logging.info("Using SGD optimizer! Set lr_decay=cosine for best results!")
+            self.optimizer = tf.train.MomentumOptimizer(self.lr_rate_ph, 0.9, use_nesterov=True)
+        else:
+            tf.logging.info("Defaulting to Adam optimizer")
+            self.optimizer = tf.train.AdamOptimizer(self.lr_rate_ph, 0.9)
+
         apply_op = self.optimizer.apply_gradients(zip(grads, tvars), global_step=self.global_step, name='train_step')
         train_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
