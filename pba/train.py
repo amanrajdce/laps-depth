@@ -94,9 +94,9 @@ def main(_):
 
     ray.init(
         webui_host='127.0.0.1',
-        memory=1024 * 1024 * 1024 * 25,  # setting 25 GB for ray workers
-        object_store_memory=1024 * 1024 * 1024 * 5,  # setting 5 GB object store
-        lru_evict=True
+        # memory=1024 * 1024 * 1024 * 25,  # setting 25 GB for ray workers
+        # object_store_memory=1024 * 1024 * 1024 * 5,  # setting 5 GB object store
+        # lru_evict=True
     )
     run_experiments({FLAGS.name: train_spec})
 

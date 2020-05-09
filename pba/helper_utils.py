@@ -298,6 +298,9 @@ def run_epoch_training(
 
     # train for one epoch
     for step in range(0, steps_per_epoch):
+        # free up ray memory
+        gc.collect()
+
         curr_lr = get_lr(curr_epoch, model.hparams, train_size, iteration=(step + 1))
         # Update the lr rate variable to the current LR.
         model.lr_rate_ph.load(curr_lr, session=session)
@@ -374,8 +377,6 @@ def run_epoch_training(
                         image_format="png", image_channels="last", step=global_step
                     )
 
-        # free up ray memory
-        gc.collect()
 
 
 

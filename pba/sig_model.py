@@ -67,7 +67,7 @@ class Model(object):
         # Setup checkpointing for this child model
         # Keep 2 or more checkpoints around during training.
         with tf.device('/cpu:0'):
-            self.saver = tf.train.Saver(max_to_keep=30)
+            self.saver = tf.train.Saver(max_to_keep=10)
 
         self.init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 

@@ -26,7 +26,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
-import sys
+import gc
 
 import pba.data_utils as data_utils
 import pba.helper_utils as helper_utils
@@ -148,6 +148,9 @@ class ModelTrainer(object):
 
     def _run_training_loop(self, curr_epoch):
         """Trains the model `m` for one epoch."""
+        # free up ray memory
+        gc.collect()
+
         start_time = time.time()
         while True:
             try:

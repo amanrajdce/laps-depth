@@ -80,9 +80,12 @@ def main(_):
 
     pbt = PopulationBasedTraining(
         time_attr="training_iteration",
-        reward_attr="abs_rel_acc",
+        reward_attr='abs_rel_acc',
+        # metric="abs_rel",
+        # mode="min",
         perturbation_interval=FLAGS.perturbation_interval,
         custom_explore_fn=explore,
+        quantile_fraction=0.25,
         log_config=True
     )
 
