@@ -24,6 +24,7 @@ class RayModel(Trainable):
     def _setup(self, *args):
         tf.logging.set_verbosity(tf.logging.INFO)
         tf.logging.info("calling setup")
+        # TODO log Ray trial id in comet.ml
         self.hparams = tf.contrib.training.HParams(**self.config)
         if self.hparams.disable_comet:
             tf.logging.info("Started logging offline for comet ml")
@@ -100,6 +101,7 @@ def main(_):
     )
     run_experiments({FLAGS.name: train_spec})
 
+    # TODO add copying code to local_dir
     ray.shutdown()
 
 

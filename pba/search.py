@@ -97,6 +97,7 @@ def main(_):
         reuse_actors=True,
         verbose=True)
 
+    # TODO add copying code to local_dir
     ray.shutdown()
 
 

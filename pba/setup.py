@@ -76,6 +76,7 @@ def create_parser(state):
     parser.add_argument('--scale_normalize', action='store_true', help='spatially normalize depth prediction')
     parser.add_argument('--rigid_warp_weight', type=float, default=1.0, help='weight for warping by rigid flow')
     parser.add_argument('--disp_smooth_weight', type=float, default=0.5)
+    parser.add_argument('--monodepth2', action='store_true', help='if enabled uses monodepth2 features')
     parser.add_argument('--num_scales', type=int, default=4, help='number of scaling points')
     parser.add_argument('--num_source', type=int, default=2, help='number of source images')
     parser.add_argument(
@@ -143,6 +144,8 @@ def create_parser(state):
         '--flatten',
         action='store_true',
         help='randomly select an aug policy from schedule')
+
+    # logging specific flag
     parser.add_argument(
         '--disable_comet',
         action='store_true',
@@ -201,7 +204,8 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         flatten=FLAGS.flatten,
         disable_comet=FLAGS.disable_comet,
         optimizer=FLAGS.optimizer,
-        local_dir=FLAGS.local_dir)
+        local_dir=FLAGS.local_dir,
+        monodepth2=FLAGS.monodepth2)
 
     if state == 'train':
         hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)

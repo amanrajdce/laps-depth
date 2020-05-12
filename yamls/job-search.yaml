@@ -1,10 +1,10 @@
 apiVersion: batch/v1
-kind: Job # Deployment will automatically restart when killed. Use Pod if not needed 
+kind: Job # Deployment will automatically restart when killed. Use Pod if not needed
 metadata:
   labels:
     k8s-app: research
-  generateName: amraj-pba-search5k-t4 # replace <your_name> with something that identifies you
-  namespace: ecewcsng 
+  generateName: amraj-search-5kt2- # replace <your_name> with something that identifies you
+  namespace: ecewcsng
 spec:
   template:
     metadata:
@@ -17,35 +17,72 @@ spec:
         image: amanraj42/tensorflow-gpu-ray:v1.11
         imagePullPolicy: Always
         workingDir: /ceph/amanraj/codes/pba-signet
-        command: ["/bin/bash", "scripts/search.sh"] # replace this with your own job execution scripts
+        command: ["/bin/sh"]                     # replace this with your own job execution scripts
+        args: ["scripts/search.sh", "pod"]
         resources:
           requests:
-            memory: "28Gi"        # requests 7Gi of memory every GPU
-            cpu: "8"             # requests 2 CPU extras
-            nvidia.com/gpu: 4
+            memory: "30Gi"          # requests 15Gi of memory every ray worker
+            cpu: "4"                # requests 2 CPU extras
+            nvidia.com/gpu: 2       # requesting X GPU
+            ephemeral-storage: 70Gi
           limits:
             memory: "45Gi"
-            cpu: "10"
-            nvidia.com/gpu: 4 # requesting X GPU
+            cpu: "6"
+            nvidia.com/gpu: 2
+            ephemeral-storage: 70Gi
         volumeMounts:
         - mountPath: /dev/shm
           name: dshm
         - mountPath: /ceph
           name: ceph
+        - mountPath: /mnt/data
+          name: data
+      initContainers:         # run first init container for copying data to nvme drive
+        - name: init-data
+          image: gitlab-registry.nautilus.optiputer.net/prp/gsutil
+          args:
+            - gsutil
+            - "-m"
+            - rsync
+            - "-erP"
+            - /ceph/data/nvme_data_sync_tar/
+            - /mnt/dest/
+          volumeMounts:
+            - name: ceph
+              mountPath: /ceph
+            - name: data
+              mountPath: /mnt/dest
+        - name: extract-data      # run data extraction scripts
+          image: gitlab-registry.nautilus.optiputer.net/prp/gsutil
+          workingDir: /mnt/data
+          command: ["/bin/sh"]
+          args: ["extract_tarball.sh"]
+          resources:
+            requests:
+              memory: "8Gi"         # requests memory and CPU to speed up extraction
+              cpu: "2"              # requests 2 CPU
+            limits:
+              memory: "8Gi"
+              cpu: "2"
+          volumeMounts:
+            - name: data
+              mountPath: /mnt/data
       volumes:
-      - name: dshm
-        emptyDir:
-          medium: Memory
-      - name: ceph
-        flexVolume:
-          driver: ceph.rook.io/rook
-          fsType: ceph
-          options:
-            clusterNamespace: rook
-            fsName: nautilusfs
-            path: /ecewcsng
-            mountUser: ecewcsng
-            mountSecret: ceph-fs-secret
+        - name: data
+          emptyDir: {}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: ceph
+          flexVolume:
+            driver: ceph.rook.io/rook
+            fsType: ceph
+            options:
+              clusterNamespace: rook
+              fsName: nautilusfs
+              path: /ecewcsng
+              mountUser: ecewcsng
+              mountSecret: ceph-fs-secret
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -56,10 +93,14 @@ spec:
                 values:
                 - 1080Ti
       nodeSelector:
-        kubernetes.io/hostname: k8s-chase-ci-02.calit2.optiputer.net
+        kubernetes.io/hostname: clu-fiona2.ucmerced.edu
+        nautilus.io/disktype: nvme
       tolerations:                                      # use nodes that can't access public internet
         - key: "nautilus.io/science-dmz"
           operator: "Exists"
           effect: "NoSchedule"
+        - key: "nautilus.io/bharadia"                   # as a priority , bharadia nodes
+          operator: "Exists"
+          effect: "NoSchedule"
 
-#kubernetes.io/hostname: clu-fiona2.ucmerced.edu # this node has 8 - 1080-Ti but access to public internet
+#kubernetes.io/hostname: clu-fiona2.ucmerced.edu, this node has 8 - 1080-Ti but no access to public internet
