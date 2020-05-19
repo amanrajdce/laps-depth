@@ -29,9 +29,8 @@ from PIL import ImageOps, ImageEnhance, ImageFilter, Image  # pylint:disable=g-m
 
 from pba.augmentation_transforms import random_flip, zero_pad_and_crop  # pylint: disable=unused-import
 from pba.augmentation_transforms import TransformFunction
-from pba.augmentation_transforms import NAME_TO_TRANSFORM # pylint: disable=unused-import
 from pba.augmentation_transforms import pil_wrap, pil_unwrap  # pylint: disable=unused-import
-from pba.augmentation_transforms import PARAMETER_MAX  # pylint: disable=unused-import
+from pba.augmentation_transforms import PARAMETER_MAX, float_parameter  # pylint: disable=unused-import
 from pba.augmentation_transforms import _posterize_impl, _solarize_impl, _enhancer_impl
 
 
@@ -51,14 +50,12 @@ def apply_policy(policy, data, image_size, verbose=False):
     Returns:
         The result of applying `policy` to `data`.
     """
-    img_data = data[:-1]
-    intrinsic = data[-1]
     # PBA cifar10 policy modified
     count = np.random.choice([0, 1, 2, 3], p=[0.10, 0.20, 0.30, 0.40])
     # count = np.random.choice([0, 1, 2, 3], p=[0.2, 0.3, 0.5, 0.0])
 
     if count != 0:
-        pil_img_data = pil_wrap(img_data)
+        data['img_data'] = pil_wrap(data['img_data'])
         policy = copy.copy(policy)
         random.shuffle(policy)
         for xform in policy:
@@ -67,17 +64,17 @@ def apply_policy(policy, data, image_size, verbose=False):
             assert 0. <= probability <= 1.
             assert 0 <= level <= PARAMETER_MAX
             xform_fn = NAME_TO_TRANSFORM[name].pil_transformer(probability, level, image_size)
-            pil_img_data, res = xform_fn(pil_img_data)
+            data, res = xform_fn(data)
             if verbose and res:
-                print("Op: {}, Magnitude: {}, Prob: {}".format(name, level, probability))
+                tf.logging.info("Op: {}, Magnitude: {}, Prob: {}".format(name, level, probability))
             count -= res
             assert count >= 0
             if count == 0:
                 break
-        pil_img_data = pil_unwrap(pil_img_data, image_size)
-        return pil_img_data + [intrinsic]
+        data['img_data'] = pil_unwrap(data['img_data'], image_size)  # apply pil_unwrap on imgs only
+        return data
     else:
-        return img_data + [intrinsic]
+        return data
 
 
 class TransformT(object):
@@ -90,15 +87,18 @@ class TransformT(object):
     def pil_transformer(self, probability, level, image_size):
         """Builds augmentation function which returns resulting image and whether augmentation was applied."""
 
-        def return_function(img_data):
+        def return_function(data):
             res = False
             if random.random() < probability:
-                if 'image_size' in inspect.getargspec(self.xform).args:
-                    img_data = [self.xform(im, level, image_size) for im in img_data]
+                func_args = inspect.getargspec(self.xform).args
+                if 'data' in func_args and 'image_size' in func_args:
+                    data = self.xform(data, level, image_size)  # transform that modifies intrinsic also
+                elif 'image_size' in func_args:
+                    data['img_data'] = [self.xform(im, level, image_size) for im in data['img_data']]  # transform that modifies only imgs
                 else:
-                    img_data = [self.xform(im, level) for im in img_data]
+                    data['img_data'] = [self.xform(im, level) for im in data['img_data']]
                 res = True
-            return img_data, res
+            return data, res
 
         name = self.name + '({:.1f},{})'.format(probability, level)
         return TransformFunction(return_function, name)
@@ -109,7 +109,6 @@ class TransformT(object):
 
 ################## Transform Functions ##################
 identity = TransformT('identity', lambda pil_img, level: pil_img)
-flip_lr = TransformT('FlipLR', lambda pil_img, level: pil_img.transpose(Image.FLIP_LEFT_RIGHT))
 
 # pylint:disable=g-long-lambda
 auto_contrast = TransformT(
@@ -124,6 +123,8 @@ invert = TransformT(
 # pylint:enable=g-long-lambda
 blur = TransformT('Blur', lambda pil_img, level: pil_img.filter(ImageFilter.BLUR))
 smooth = TransformT('Smooth', lambda pil_img, level: pil_img.filter(ImageFilter.SMOOTH))
+edge_enhance = TransformT('EdgeEnhance', lambda pil_img, level: pil_img.filter(ImageFilter.EDGE_ENHANCE))
+contour = TransformT('Contour', lambda pil_img, level: pil_img.filter(ImageFilter.CONTOUR))
 posterize = TransformT('Posterize', _posterize_impl)
 
 
@@ -206,6 +207,30 @@ def _cutout_pil_impl(pil_img, level, image_size):
     return pil_img
 
 
+def _scale_crop_pil_impl(data, level, image_size):
+    """Apply scaling and random crop"""
+    h, w = image_size
+    scale = 1.05 + float_parameter(level, maxval=0.15)
+    new_h = int(h * scale)
+    new_w = int(w * scale)
+
+    # scaling
+    data['img_data'] = [pil_img.resize((new_w, new_h), resample=2) for pil_img in data['img_data']]  # resample=2 for bilinear
+    data['intrinsic'][0, 0] *= scale  # fx
+    data['intrinsic'][1, 1] *= scale  # fy
+    data['intrinsic'][0, 2] *= scale  # cx
+    data['intrinsic'][1, 2] *= scale  # cy
+
+    # random crop
+    offset_y = np.random.randint(0, new_h - h + 1)
+    offset_x = np.random.randint(0, new_w - w + 1)
+    data['img_data'] = [pil_img.crop((offset_x, offset_y, offset_x + w, offset_y + h)) for pil_img in data['img_data']]
+    data['intrinsic'][0, 2] -= float(offset_x)  # cx
+    data['intrinsic'][1, 2] -= float(offset_y)  # cy
+
+    return data
+
+
 cutout = TransformT('Cutout', _cutout_pil_impl)
 crop_bilinear = TransformT('CropBilinear', _crop_impl)
 solarize = TransformT('Solarize', _solarize_impl)
@@ -213,6 +238,8 @@ color = TransformT('Color', _enhancer_impl(ImageEnhance.Color))
 contrast = TransformT('Contrast', _enhancer_impl(ImageEnhance.Contrast))
 brightness = TransformT('Brightness', _enhancer_impl(ImageEnhance.Brightness))
 sharpness = TransformT('Sharpness', _enhancer_impl(ImageEnhance.Sharpness))
+scale_crop = TransformT('ScaleCrop', _scale_crop_pil_impl)
+flip_lr = TransformT('FlipLR', lambda pil_img, level: pil_img.transpose(Image.FLIP_LEFT_RIGHT))
 
 HP_TRANSFORMS = [
     brightness,
@@ -224,9 +251,15 @@ HP_TRANSFORMS = [
     equalize,
     auto_contrast,
     cutout,
-    contrast
+    contrast,
+    #blur,   # Added new stuffs from here
+    #smooth,
+    #edge_enhance,
+    #contour,
+    #flip_lr,
+    #scale_crop
 ]
-# TODO crop_bilinear and flip_lr
+# TODO crop_bilinear
 
 NAME_TO_TRANSFORM = collections.OrderedDict((t.name, t) for t in HP_TRANSFORMS)
 HP_TRANSFORM_NAMES = NAME_TO_TRANSFORM.keys()

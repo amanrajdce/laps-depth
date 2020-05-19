@@ -7,6 +7,8 @@ from __future__ import print_function
 import random
 import numpy as np
 import ray
+import shutil
+import os
 from ray.tune import run_experiments
 from ray.tune.schedulers import PopulationBasedTraining
 import tensorflow as tf
@@ -78,6 +80,14 @@ def main(_):
         # lru_evict=True
     )
 
+    # copy code to local_dir
+    code_dir = os.path.join(os.path.abspath(os.getcwd()), 'pba')
+    dst_dir = os.path.join(FLAGS.local_dir, FLAGS.name, 'pba')
+    if os.path.exists(dst_dir):
+        shutil.rmtree(dst_dir)  # remove old copy of code
+
+    shutil.copytree(code_dir, dst_dir)
+
     pbt = PopulationBasedTraining(
         time_attr="training_iteration",
         reward_attr='abs_rel_acc',
@@ -85,7 +95,7 @@ def main(_):
         # mode="min",
         perturbation_interval=FLAGS.perturbation_interval,
         custom_explore_fn=explore,
-        quantile_fraction=0.25,
+        quantile_fraction=0.50,
         log_config=True
     )
 
@@ -97,7 +107,6 @@ def main(_):
         reuse_actors=True,
         verbose=True)
 
-    # TODO add copying code to local_dir
     ray.shutdown()
 
 

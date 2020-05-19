@@ -19,7 +19,7 @@ spec:
      - name: log-in
        image: gitlab-registry.nautilus.optiputer.net/bcheng/research-containers/login
        imagePullPolicy: "IfNotPresent"
-       workingDir: /ceph/
+       workingDir: /ceph/amanraj/
        args: ['sleep', 'infinity']
        resources:
          requests:

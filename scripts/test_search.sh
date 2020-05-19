@@ -21,9 +21,9 @@ python pba/search.py \
   --test_file_path "$test_file_path" \
   --gt_path "$gt_path" \
   --batch_size 8 --lr 0.0002 --lr_decay step \
-  --checkpoint_freq 1 \
-  --gpu 1 --cpu 2 --epochs 10 --num_samples 1 \
-  --perturbation_interval 1 --log_iter 20 \
+  --checkpoint_freq 0 \
+  --gpu 1 --cpu 2 --epochs 10 --num_samples 2 \
+  --perturbation_interval 1 --log_iter 40 \
   --scale_normalize --name "$name" --monodepth2
   #--disable_comet
 

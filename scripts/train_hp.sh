@@ -14,12 +14,10 @@ train_hp_kitti() {
   test_file_path="$kitti_raw/test_files_eigen.txt"
   gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-  # name="train_hp_search-train-5k-t2-max-25q"
-  name="train_hp_search-5kt2-max-25q-mono2"
+  name="train_hp_search-train-5k-t2-max-25q"
   # hp_policy="$PWD/schedules/rcifar10_16_kitti.txt"
-  # hp_policy="$local_dir/search_train_5k_t2_max_25q/pbt_policy_00001.txt"
-  hp_policy="$local_dir/search_train_5k_t2_max_25q_mono2/pbt_policy_00000.txt"
-  # restore="$local_dir/train_hp_search-train-5k-t2-max-25q/policy1_run3/checkpoint_17/model.ckpt-17"
+  hp_policy="$local_dir/search_train_5k_t2_max_25q_mono2/pbt_policy_00001.txt"
+  restore="$local_dir/train_hp_search-train-5k-t2-max-25q/policy1_run4/checkpoint_28/model.ckpt-28"
 
   python pba/train.py \
     --local_dir "$local_dir" \
@@ -30,13 +28,13 @@ train_hp_kitti() {
     --gt_path "$gt_path" \
     --name "$name" --scale_normalize --checkpoint_freq 1 \
     --batch_size 8 --lr 0.0002 --lr_decay step \
-    --gpu 1 --cpu 3 --epochs 35 --log_iter 1000 --monodepth2 \
-    --use_hp_policy --hp_policy "$hp_policy" --hp_policy_epochs 35 # --restore $restore
+    --gpu 1 --cpu 3 --epochs 35 --log_iter 1000 \
+    --use_hp_policy --hp_policy "$hp_policy" --hp_policy_epochs 35 --restore $restore
 
     #--disable_comet
     # SIGNet was trained for approx 35 epochs.
     # batch_size=4, lr=0.0002, no lr_decay
-    # CUDA_VISIBLE_DEVICES=1 bash ./scripts/train_mono2.sh
+    # CUDA_VISIBLE_DEVICES=2 bash ./scripts/train_hp.sh
 
 }
 

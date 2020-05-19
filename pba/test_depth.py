@@ -75,8 +75,7 @@ def main(args, logger):
         ckpt_path = os.path.join(ckpt, "model.ckpt-" + ckpt_num)
         logger.info("Evaluating for: {}".format(ckpt_path))
         tester.extract_model_spec(os.path.join(ckpt_path))
-        preds_all = tester.eval_child_model(tester.meval, epoch=0)
-        results = tester.run_evaluation(preds_all, epoch=0, verbose=False)
+        results = tester.run_evaluation(epoch=int(ckpt_num), verbose=False)
         res = ",".join([str((k, v)) for k, v in results.items()])
         logger.info("Result:{}".format(res))
 

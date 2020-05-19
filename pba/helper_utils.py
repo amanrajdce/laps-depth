@@ -23,6 +23,8 @@ import tensorflow as tf
 import PIL.Image as pil
 import cv2
 import time
+import json as js
+import os
 
 import gc
 
@@ -48,14 +50,14 @@ def compute_errors(gt, pred):
     return abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3
 
 
-def eval_child_model(session, model, curr_epoch, test_files, comet_exp=None):
+def compute_predictions(session, model, global_step, test_files, comet_exp=None):
     """
-    Evaluates `model` on held out data depending on `mode`.
+    Compute predictions for evaluation model.
 
     Args:
         session: TensorFlow session the model will be run with.
         model: TensorFlow model that will be evaluated.
-        curr_epoch: current epoch of model on which being evaluated
+        global_step: current global step of model
         test_files: list of testing files
         comet_exp: comet.ml experiment name to write log to
 
@@ -94,7 +96,7 @@ def eval_child_model(session, model, curr_epoch, test_files, comet_exp=None):
                 break
             preds_all.append(preds[b, :, :, 0])
 
-        # comet.ml log all the images and errors
+        # comet.ml log all the images and predictions
         if comet_exp is not None and t % 40 == 0:
             curr_batch_size = len(inputs)
             with comet_exp.test():
@@ -103,12 +105,12 @@ def eval_child_model(session, model, curr_epoch, test_files, comet_exp=None):
                     # input image
                     comet_exp.log_image(
                         inputs[b, :, :, :], name="test_iter" + str(step) + "_input",
-                        image_format="png", image_channels="last", step=curr_epoch
+                        image_format="png", image_channels="last", step=global_step
                     )
                     # prediction
                     comet_exp.log_image(
                         preds[b, :, :, :], name="test_iter" + str(step) + "_pred", image_format="png",
-                        image_colormap="plasma", image_channels="last", step=curr_epoch
+                        image_colormap="plasma", image_channels="last", step=global_step
                     )
 
     assert len(preds_all) == len(test_files)
@@ -116,7 +118,7 @@ def eval_child_model(session, model, curr_epoch, test_files, comet_exp=None):
     return preds_all
 
 
-def run_evaluation(gt_depths, pred_depths, curr_epoch, min_depth=1e-3, max_depth=80, verbose=True, comet_exp=None):
+def eval_predictions(gt_depths, pred_depths, global_step, min_depth=1e-3, max_depth=80, verbose=True, comet_exp=None):
     t1 = time.time()
     num_test = len(gt_depths)
     pred_depths_resized = []
@@ -192,32 +194,33 @@ def run_evaluation(gt_depths, pred_depths, curr_epoch, min_depth=1e-3, max_depth
         "d1_all": d1_all,
         "a1": a1,
         "a2": a2,
-        "a3": a3
+        "a3": a3,
+        "global_step": global_step  # training_iteration is reserved by ray to keep track of epoch
     }
     if comet_exp is not None:
         with comet_exp.test():  # to provide context for comet.ml graphs
-            comet_exp.log_metrics(results, step=curr_epoch)
+            comet_exp.log_metrics(results, step=global_step)
 
     return results
 
 
-def cosine_lr(learning_rate, epoch, iteration, batches_per_epoch, total_epochs):
+def cosine_lr(learning_rate, cur_epoch, iteration, steps_per_epoch, total_epochs):
     """
     Cosine Learning rate.
 
     Args:
         learning_rate: Initial learning rate.
-        epoch: Current epoch we are one. This is one based.
+        cur_epoch: Current epoch we are one. This is 1 based.
         iteration: Current batch in this epoch.
-        batches_per_epoch: Batches per epoch.
+        steps_per_epoch: number of steps per epoch
         total_epochs: Total epochs you are training for.
 
     Returns:
-        The learning rate to be used for this current batch.
+        The learning rate to be used for current step.
     """
-    t_total = total_epochs * batches_per_epoch
-    t_cur = float(epoch * batches_per_epoch + iteration)
-    return 0.5 * learning_rate * (1 + np.cos(np.pi * t_cur / t_total))
+    total_steps = total_epochs * steps_per_epoch
+    cur_step = float((cur_epoch-1) * steps_per_epoch + iteration)
+    return 0.5 * learning_rate * (1 + np.cos(np.pi * cur_step / total_steps))
 
 
 # TODO might have to tune decay rate for KITTI
@@ -232,18 +235,17 @@ def step_lr(learning_rate, epoch):
     Returns:
         The learning rate to be used for this current batch.
     """
-    if epoch < 15:
+    if epoch < 16:
         return learning_rate
-    elif epoch < 30:
+    elif epoch < 31:
         return learning_rate * 0.1
     else:
         return learning_rate * 0.01
 
 
-def get_lr(curr_epoch, hparams, train_size, iteration=None):
+def get_lr(curr_epoch, hparams, steps_per_epoch, iteration=None):
     """Returns the learning rate during training based on the current epoch."""
     assert iteration is not None
-    batches_per_epoch = int(train_size / hparams.batch_size)
 
     # No lr decay enabled
     if hparams.lr_decay is None:
@@ -253,16 +255,17 @@ def get_lr(curr_epoch, hparams, train_size, iteration=None):
         lr = step_lr(hparams.lr, curr_epoch)
     elif hparams.lr_decay == "cosine":
         lr = cosine_lr(
-            hparams.lr, curr_epoch, iteration, batches_per_epoch, hparams.num_epochs
+            hparams.lr, curr_epoch, iteration, steps_per_epoch, hparams.num_epochs
         )
     else:
-        raise ValueError("Unknown  lr decay policy!!")
+        raise ValueError("Unknown lr decay policy!!")
 
     return lr
 
 
 def run_epoch_training(
-        session, model, dataset, train_size, curr_epoch, comet_exp=None
+        session, model, dataset, train_size, curr_epoch, comet_exp=None,
+        last_ckpt_dir=None, model_saver=None, eval_fun=None
 ):
     """Runs one epoch of training for the model passed in.
 
@@ -270,16 +273,21 @@ def run_epoch_training(
         session: TensorFlow session the model will be run with.
         model: TensorFlow model that will be evaluated.
         dataset: DataSet object that contains train data that `model` will train on
-        curr_epoch: How many of epochs of training have been done so far.
+        curr_epoch: current epoch of model training
         train_size: Size of training set
         comet_exp: comet.ml experiment name to write log to
+        last_ckpt_dir: directory of last saved ckpt by ray
+        model_saver: tf.Saver object
+        eval_fun: function that predicts and evaluates
 
     Returns:
         The accuracy of 'model' on the training set
     """
     global_seed = 8964
     batch_size = model.hparams.batch_size
+
     steps_per_epoch = int(train_size / batch_size)
+    assert steps_per_epoch == model.hparams.steps_per_epoch
     tf.logging.info('steps per epoch: {}'.format(steps_per_epoch))
     curr_step = session.run(model.global_step)
     tf.logging.info("Current step: {}".format(curr_step))
@@ -304,7 +312,7 @@ def run_epoch_training(
         curr_lr = get_lr(curr_epoch, model.hparams, train_size, iteration=(step + 1))
         # Update the lr rate variable to the current LR.
         model.lr_rate_ph.load(curr_lr, session=session)
-        if step % 20 == 0:
+        if step % model.hparams.log_iter == 0:
             tf.logging.info('Training {}/{}'.format(step, steps_per_epoch))
 
         # get batch_indexes
@@ -315,7 +323,7 @@ def run_epoch_training(
         # get original batch as well as augmented from policy methods
         tgt_img, src_img_stack, tgt_img_aug, src_img_stack_aug, intrinsic = dataset.next_batch(batch_indxs, curr_epoch)
 
-        _, step, preds, tgt_img_final, src_img_stack_final, fwd_warp, fwd_error, bwd_warp, bwd_error, loss = \
+        _, global_step, preds, tgt_img_final, src_img_stack_final, fwd_warp, fwd_error, bwd_warp, bwd_error, loss = \
             session.run(
                 [model.train_op, model.global_step, model.pred_depth[0],
                  model.tgt_image, model.src_image_stack,
@@ -331,7 +339,6 @@ def run_epoch_training(
         # src_img_stack_final: final src images with signet augmentation if enabled
 
         # comet.ml log all the images and errors
-        global_step = step + (steps_per_epoch * curr_epoch)
         if comet_exp is not None and global_step % model.hparams.log_iter == 0:
             with comet_exp.train():  # train context for comet.ml logging into cloud
                 # train metrics
@@ -377,6 +384,27 @@ def run_epoch_training(
                         image_format="png", image_channels="last", step=global_step
                     )
 
+        # checkpoint model at current global step if enabled
+        if last_ckpt_dir is not None and model.hparams.checkpoint_iter and \
+           curr_epoch > model.hparams.checkpoint_iter_after:
+            if global_step % model.hparams.checkpoint_iter == 0:
+                last_ckpt_epoch = last_ckpt_dir.split("/")[-1]
+                train_dir = last_ckpt_dir.replace(last_ckpt_epoch, "")
+                ckpt_dir_itr = os.path.join(train_dir, "checkpoint_itr" + str(global_step))
 
+                assert model_saver is not None, "model saver object is None"
+                assert eval_fun is not None, "evaluation fun is None"
 
+                model_save_name = os.path.join(ckpt_dir_itr, 'model.ckpt') + '-' + str(global_step)
+                save_path = model_saver.save(session, model_save_name)
+                tf.logging.info('Saved child model at:{}'.format(model_save_name))
+                os.close(os.open(model_save_name, os.O_CREAT))
+                results = eval_fun(epoch=curr_epoch, step=global_step)
+                results.update({"training_iteration": curr_epoch})
+                results.update(model.hparams.values())
 
+                with open(os.path.join(train_dir, 'result.json'), 'a') as f:
+                    f.write(str(results)+"\n")
+
+                if comet_exp is not None:
+                    comet_exp.log_parameter("ray_train_dir", train_dir)

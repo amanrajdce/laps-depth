@@ -13,7 +13,7 @@ search_kitti() {
   test_file_path="$kitti_raw/test_files_eigen.txt"
   gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-  name="search_train_5k_t2_max_25q_mono2"
+  name="search_train_5k_t8_max_50q_mono2_16aug"
 
   python pba/search.py \
     --local_dir "$local_dir" \
@@ -23,8 +23,8 @@ search_kitti() {
     --test_file_path "$test_file_path" \
     --gt_path "$gt_path" \
     --batch_size 8 --lr 0.0002 --lr_decay step \
-    --checkpoint_freq 1 \
-    --gpu 1 --cpu 2 --epochs 35 --num_samples 2 \
+    --checkpoint_freq 0 \
+    --gpu 1 --cpu 2 --epochs 35 --num_samples 8 \
     --perturbation_interval 1 --log_iter 250 \
     --scale_normalize --name "$name" --monodepth2
 

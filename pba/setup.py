@@ -48,10 +48,12 @@ def create_parser(state):
 
     # Training settings
     parser.add_argument('--local_dir', type=str, default='/tmp/ray_results/',  help='Ray directory.')
-    parser.add_argument('--restore', type=str, default=None, help='If specified, tries to restore from given path.')
-    parser.add_argument('--checkpoint_freq', type=int, default=50, help='Checkpoint frequency.')
-    parser.add_argument('--cpu', type=float, default=4, help='Allocated by Ray')
-    parser.add_argument('--gpu', type=float, default=1, help='Allocated by Ray')
+    parser.add_argument('--restore', type=str, default=None, help='if specified, tries to restore from given path.')
+    parser.add_argument('--checkpoint_freq', type=int, default=1, help='checkpoint every n epochs for ray')
+    parser.add_argument('--checkpoint_iter', type=int, default=2000, help='checkpoint every n iterations for better model')
+    parser.add_argument('--checkpoint_iter_after', type=int, default=10, help='apply checkpoint_iter after this epoch')
+    parser.add_argument('--cpu', type=float, default=4, help='allocated by Ray')
+    parser.add_argument('--gpu', type=float, default=1, help='allocated by Ray')
     parser.add_argument(
         '--epochs',
         type=int,
@@ -153,7 +155,6 @@ def create_parser(state):
     )
 
     args = parser.parse_args()
-    tf.logging.info(str(args))
     return args
 
 
@@ -210,6 +211,8 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
     if state == 'train':
         hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)
         hparams.add_hparam('use_hp_policy', FLAGS.use_hp_policy)
+        hparams.add_hparam('checkpoint_iter', FLAGS.checkpoint_iter)
+        hparams.add_hparam('checkpoint_iter_after', FLAGS.checkpoint_iter_after)
         if FLAGS.use_hp_policy:
             if FLAGS.hp_policy == 'random':
                 tf.logging.info('RANDOM SEARCH')
@@ -234,11 +237,15 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         # default start value of 0
         hparams.add_hparam('hp_policy', [0 for _ in range(4 * NUM_HP_TRANSFORM)])
         hparams.add_hparam('perturbation_interval', FLAGS.perturbation_interval)
+        hparams.add_hparam('checkpoint_iter', 0)
+        hparams.add_hparam('checkpoint_iter_after', 0)
     else:
         raise ValueError('unknown state')
 
     epochs = FLAGS.epochs
     hparams.add_hparam('num_epochs', epochs)
     tf.logging.info('epochs: {}, lr: {}, lr_decay: {}'.format(hparams.num_epochs, hparams.lr, hparams.lr_decay))
+    tf.logging.info("Will checkpoint model every {} iterations".format(FLAGS.checkpoint_iter))
+    tf.logging.info(str(hparams.values()))
 
     return hparams
