@@ -7,10 +7,11 @@ from __future__ import print_function
 from comet_ml import Experiment
 from comet_ml import OfflineExperiment
 
-import os
 import ray
+import os
 from ray.tune import run_experiments
 from ray.tune import Trainable
+import shutil
 import tensorflow as tf
 
 from pba.model import ModelTrainer
@@ -25,6 +26,8 @@ class RayModel(Trainable):
         tf.logging.set_verbosity(tf.logging.INFO)
         tf.logging.info("calling setup")
         self.hparams = tf.contrib.training.HParams(**self.config)
+        self.hparams.add_hparam('trial_name', self.trial_name)
+
         if self.hparams.disable_comet:
             tf.logging.info("Started logging offline for comet ml")
             self.comet_experiment = OfflineExperiment(
@@ -34,24 +37,21 @@ class RayModel(Trainable):
         else:
             tf.logging.info("Started logging to comet ml online")
             self.comet_experiment = Experiment(
-                api_key="rY4zUJYxfKHYUlgAirQZy2190",
+                api_key="1M6vRcdzjgqClytApluyGXhTP",
                 project_name=self.hparams.name, workspace="amanraj42"
             )
 
-        self.hparams = tf.contrib.training.HParams(**self.config)
         self.trainer = ModelTrainer(self.hparams, comet_exp=self.comet_experiment)
 
     # TODO, fix training, integrate KITTI evaluation
     def _train(self):
-        """Runs one epoch of training, and returns current epoch accuracies."""
-        tf.logging.info("training for iteration: {}".format(self._iteration))
-        eval_preds = self.trainer.run_model(self._iteration)
-        # pylint: disable=protected-access
-        results = self.trainer.run_evaluation(eval_preds, self._iteration)
+        """Runs one epoch(0 based, make it 1 based) of training, and returns current epoch errors."""
+        tf.logging.info("training for iteration: {}".format(self._iteration + 1))
+        results = self.trainer.run_model(self._iteration + 1)
         return results
 
     def _save(self, checkpoint_dir):
-        """Uses tf trainer object to checkpoint."""
+        """Uses tf trainer object to checkpoint. (1 based)"""
         save_name = self.trainer.save_model(checkpoint_dir, self._iteration)
         tf.logging.info("saved model {}".format(save_name))
         os.close(os.open(save_name, os.O_CREAT))
@@ -94,10 +94,20 @@ def main(_):
 
     ray.init(
         webui_host='127.0.0.1',
+        # plasma_directory="/dev/shm/",
         # memory=1024 * 1024 * 1024 * 25,  # setting 25 GB for ray workers
         # object_store_memory=1024 * 1024 * 1024 * 5,  # setting 5 GB object store
         # lru_evict=True
     )
+
+    # copy code to local_dir
+    code_dir = os.path.join(os.path.abspath(os.getcwd()), 'pba')
+    dst_dir = os.path.join(FLAGS.local_dir, FLAGS.name, 'pba')
+    if os.path.exists(dst_dir):
+        shutil.rmtree(dst_dir)  # remove old copy of code
+
+    shutil.copytree(code_dir, dst_dir)
+
     run_experiments({FLAGS.name: train_spec})
 
     ray.shutdown()

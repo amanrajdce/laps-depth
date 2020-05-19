@@ -25,9 +25,11 @@ except:
     import pickle
 import os
 import random
+import copy
+import cv2
 import numpy as np
 import tensorflow as tf
-import cv2
+import PIL.Image as pil
 import gc
 import ray
 
@@ -66,12 +68,23 @@ class ImageFolderKITTI(object):
         :param img_path: path of image sequence
         :return: tgt_img, src_img_1, srcm_2
         """
-        # read image, convert to RGB
-        image_seq = cv2.imread(img_path)
-        image_seq = cv2.cvtColor(image_seq, cv2.COLOR_BGR2RGB)
-        src_img_1 = image_seq[:, :self.input_width, :]
-        tgt_img = image_seq[:, self.input_width:2*self.input_width, :]
-        src_img_2 = image_seq[:, 2*self.input_width:, :]
+        # read image
+        fh = open(img_path, 'rb')
+        image_seq = np.array(pil.open(fh), dtype='float32')
+
+        # get height and width of frame, total 3 frames in sequence
+        height, width, _ = image_seq.shape
+        width = width // 3
+
+        src_img_1 = image_seq[:, :width, :]
+        tgt_img = image_seq[:, width:2*width, :]
+        src_img_2 = image_seq[:, 2*width:, :]
+
+        if self.input_width != width or self.input_height != height:
+            # resize to input height and width
+            src_img_1 = cv2.resize(src_img_1, (self.input_width, self.input_height), interpolation=cv2.INTER_LINEAR)
+            tgt_img = cv2.resize(tgt_img, (self.input_width, self.input_height), interpolation=cv2.INTER_LINEAR)
+            src_img_2 = cv2.resize(src_img_2, (self.input_width, self.input_height), interpolation=cv2.INTER_LINEAR)
 
         # Normalize
         tgt_img = tgt_img.astype('float32') / 255.0
@@ -319,7 +332,7 @@ def augment_sample(
 ):
     """
     :param sample_idx: index of sample to be read
-    :param iteration: current epoch of model
+    :param iteration: current epoch of model (1 based)
     :param data_loader: dataloader implementing __getitem__
     :param no_aug_policy: whether to use any policy or not
     :param use_hp_policy: whether to use hp policy or not
@@ -333,44 +346,42 @@ def augment_sample(
     """
     # read sample from disk
     tgt_img, src_img_1, src_img_2, intrinsic = data_loader[sample_idx]
+    input_data = {'img_data': [tgt_img, src_img_1, src_img_2], 'intrinsic': intrinsic}
 
     if not no_aug_policy:
         if not use_hp_policy:
             # apply autoaugment policy here modified for KITTI
             epoch_policy = good_policies[np.random.choice(len(good_policies))]
-            tgt_img_aug, src_img_1_aug, src_img_2_aug, intrinsic = augmentation_transforms.apply_policy(
-                policy=epoch_policy, data=[tgt_img, src_img_1, src_img_2, intrinsic],
-                image_size=(input_height, input_width)
+            output_data = augmentation_transforms.apply_policy(
+                policy=epoch_policy, data=copy.copy(input_data), image_size=(input_height, input_width)
             )
         else:
-            # apply PBA policy modified for KITTI
+            # apply learned policy for kitti
             if isinstance(policy[0], list):
                 # single policy
                 if flatten:
-                    tgt_img_aug, src_img_1_aug, src_img_2_aug, intrinsic = augmentation_transforms.apply_policy(
+                    output_data = augmentation_transforms.apply_policy(
                         policy=policy[random.randint(0, len(policy) - 1)],
-                        data=[tgt_img, src_img_1, src_img_2, intrinsic],
-                        image_size=(input_height, input_width)
+                        data=copy.copy(input_data), image_size=(input_height, input_width)
                     )
                 else:
-                    tgt_img_aug, src_img_1_aug, src_img_2_aug, intrinsic = augmentation_transforms.apply_policy(
-                        policy=policy[iteration],
-                        data=[tgt_img, src_img_1, src_img_2, intrinsic],
-                        image_size=(input_height, input_width)
+                    output_data = augmentation_transforms.apply_policy(
+                        policy=policy[iteration-1],
+                        data=copy.copy(input_data), image_size=(input_height, input_width)
                     )
             elif isinstance(policy, list):
-                # policy schedule
-                tgt_img_aug, src_img_1_aug, src_img_2_aug, intrinsic = augmentation_transforms.apply_policy(
-                    policy=policy, data=[tgt_img, src_img_1, src_img_2, intrinsic],
-                    image_size=(input_height, input_width)
+                # policy schedule learning during search
+                output_data = augmentation_transforms.apply_policy(
+                    policy=policy, data=copy.copy(input_data), image_size=(input_height, input_width)
                 )
             else:
                 raise ValueError('Unknown policy.')
     else:
         # no data augmentation policy applied
-        tgt_img_aug = tgt_img
-        src_img_1_aug = src_img_1
-        src_img_2_aug = src_img_2
+        output_data = copy.copy(input_data)
+
+    tgt_img_aug, src_img_1_aug, src_img_2_aug = output_data['img_data']
+    intrinsic = output_data['intrinsic']
 
     # convert source image into (B, H, W, 3*2)
     src_img_stack = np.concatenate((src_img_1, src_img_2), axis=-1)

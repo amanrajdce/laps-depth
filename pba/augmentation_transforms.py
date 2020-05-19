@@ -63,18 +63,16 @@ def apply_policy(policy, data, image_size):
   Returns:
     The result of applying `policy` to `img`.
   """
-    img_data = data[:-1]
-    intrinsic = data[-1]
-    pil_img_data = pil_wrap(img_data)
+    data['img_data'] = pil_wrap(data['img_data'])
     for xform in policy:
         assert len(xform) == 3
         name, probability, level = xform
         xform_fn = NAME_TO_TRANSFORM[name].pil_transformer(probability, level, image_size)
-        pil_img_data = xform_fn(pil_img_data)
+        data['img_data'] = xform_fn(data['img_data'])
 
-    pil_img_data = pil_unwrap(pil_img_data, image_size)
+    data['img_data'] = pil_unwrap(data['img_data'], image_size)
 
-    return pil_img_data + [intrinsic]
+    return data
 
 
 def random_flip(x):

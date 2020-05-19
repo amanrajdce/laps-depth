@@ -48,10 +48,12 @@ def create_parser(state):
 
     # Training settings
     parser.add_argument('--local_dir', type=str, default='/tmp/ray_results/',  help='Ray directory.')
-    parser.add_argument('--restore', type=str, default=None, help='If specified, tries to restore from given path.')
-    parser.add_argument('--checkpoint_freq', type=int, default=50, help='Checkpoint frequency.')
-    parser.add_argument('--cpu', type=float, default=4, help='Allocated by Ray')
-    parser.add_argument('--gpu', type=float, default=1, help='Allocated by Ray')
+    parser.add_argument('--restore', type=str, default=None, help='if specified, tries to restore from given path.')
+    parser.add_argument('--checkpoint_freq', type=int, default=1, help='checkpoint every n epochs for ray')
+    parser.add_argument('--checkpoint_iter', type=int, default=2000, help='checkpoint every n iterations for better model')
+    parser.add_argument('--checkpoint_iter_after', type=int, default=10, help='apply checkpoint_iter after this epoch')
+    parser.add_argument('--cpu', type=float, default=4, help='allocated by Ray')
+    parser.add_argument('--gpu', type=float, default=1, help='allocated by Ray')
     parser.add_argument(
         '--epochs',
         type=int,
@@ -76,6 +78,7 @@ def create_parser(state):
     parser.add_argument('--scale_normalize', action='store_true', help='spatially normalize depth prediction')
     parser.add_argument('--rigid_warp_weight', type=float, default=1.0, help='weight for warping by rigid flow')
     parser.add_argument('--disp_smooth_weight', type=float, default=0.5)
+    parser.add_argument('--monodepth2', action='store_true', help='if enabled uses monodepth2 features')
     parser.add_argument('--num_scales', type=int, default=4, help='number of scaling points')
     parser.add_argument('--num_source', type=int, default=2, help='number of source images')
     parser.add_argument(
@@ -143,6 +146,8 @@ def create_parser(state):
         '--flatten',
         action='store_true',
         help='randomly select an aug policy from schedule')
+
+    # logging specific flag
     parser.add_argument(
         '--disable_comet',
         action='store_true',
@@ -150,7 +155,6 @@ def create_parser(state):
     )
 
     args = parser.parse_args()
-    tf.logging.info(str(args))
     return args
 
 
@@ -201,11 +205,14 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         flatten=FLAGS.flatten,
         disable_comet=FLAGS.disable_comet,
         optimizer=FLAGS.optimizer,
-        local_dir=FLAGS.local_dir)
+        local_dir=FLAGS.local_dir,
+        monodepth2=FLAGS.monodepth2)
 
     if state == 'train':
         hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)
         hparams.add_hparam('use_hp_policy', FLAGS.use_hp_policy)
+        hparams.add_hparam('checkpoint_iter', FLAGS.checkpoint_iter)
+        hparams.add_hparam('checkpoint_iter_after', FLAGS.checkpoint_iter_after)
         if FLAGS.use_hp_policy:
             if FLAGS.hp_policy == 'random':
                 tf.logging.info('RANDOM SEARCH')
@@ -230,11 +237,15 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         # default start value of 0
         hparams.add_hparam('hp_policy', [0 for _ in range(4 * NUM_HP_TRANSFORM)])
         hparams.add_hparam('perturbation_interval', FLAGS.perturbation_interval)
+        hparams.add_hparam('checkpoint_iter', 0)
+        hparams.add_hparam('checkpoint_iter_after', 0)
     else:
         raise ValueError('unknown state')
 
     epochs = FLAGS.epochs
     hparams.add_hparam('num_epochs', epochs)
     tf.logging.info('epochs: {}, lr: {}, lr_decay: {}'.format(hparams.num_epochs, hparams.lr, hparams.lr_decay))
+    tf.logging.info("Will checkpoint model every {} iterations".format(FLAGS.checkpoint_iter))
+    tf.logging.info(str(hparams.values()))
 
     return hparams

@@ -14,10 +14,9 @@ train_hp_kitti() {
   test_file_path="$kitti_raw/test_files_eigen.txt"
   gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-  name="train_hp_search-train-5k-t2-max-25q"
-  # hp_policy="$PWD/schedules/rcifar10_16_kitti.txt"
-  hp_policy="$local_dir/search_train_5k_t2_max_25q_mono2/pbt_policy_00001.txt"
-  restore="$local_dir/train_hp_search-train-5k-t2-max-25q/policy1_run4/checkpoint_28/model.ckpt-28"
+  name="train_hp_search-5kt8-max-50q-mono2"
+  hp_policy="$local_dir/search_train_5k_t8_max_50q_mono2/pbt_policy_$2.txt"
+  restore="$local_dir/train_hp_search-5kt8-max-50q-mono2/policy6_run1/checkpoint_3/model.ckpt-3"
 
   python pba/train.py \
     --local_dir "$local_dir" \
@@ -26,25 +25,25 @@ train_hp_kitti() {
     --train_file_path "$train_file_path" \
     --test_file_path "$test_file_path" \
     --gt_path "$gt_path" \
-    --name "$name" --scale_normalize --checkpoint_freq 1 \
+    --name "$name" --scale_normalize \
+    --checkpoint_freq 1 --checkpoint_iter 2000 --checkpoint_iter_after 10 \
     --batch_size 8 --lr 0.0002 --lr_decay step \
-    --gpu 1 --cpu 3 --epochs 35 --log_iter 1000 \
-    --use_hp_policy --hp_policy "$hp_policy" --hp_policy_epochs 35 --restore $restore
+    --gpu 1 --cpu 3 --epochs 35 --log_iter 1000 --monodepth2 \
+    --use_hp_policy --hp_policy "$hp_policy" --hp_policy_epochs 35  --restore $restore \
+    # --disable_comet
+    #
 
-    #--disable_comet
-    # SIGNet was trained for approx 35 epochs.
-    # batch_size=4, lr=0.0002, no lr_decay
-    # CUDA_VISIBLE_DEVICES=2 bash ./scripts/train_hp.sh
-
+    # CUDA_VISIBLE_DEVICES=3 bash pod/train_mono2.sh local 00000
 }
 
 mode=${1:-local} # defaults to local mode of deployment
+policy=${2:-00000}  # defaults to pbt_policy_00000.txt
 
 # shellcheck disable=SC2198
 if [ "$mode" = "pod" ]; then
-  train_hp_kitti /mnt/data
+  train_hp_kitti /mnt/data "$policy"
 elif [ "$mode" = "local" ]; then
-  train_hp_kitti /ceph/amanraj/data
+  train_hp_kitti /ceph/amanraj/data "$policy"
 else
   echo "error executing script!"
 fi
