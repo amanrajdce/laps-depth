@@ -169,13 +169,15 @@ def parse_policy(policy_emb, augmentation_transforms):
 class TrainDataSet(object):
     """Dataset object that produces augmented training data"""
 
-    def __init__(self, hparams):
+    def __init__(self, hparams, style_augmentor=None, comet_exp=None):
         """
         :param hparams: tf.hparams object
         """
         self.hparams = hparams
         self.input_height = hparams.input_height
         self.input_width = hparams.input_width
+        self.style_augmentor = ray.put(style_augmentor)
+        self.comet_exp = comet_exp
 
         # parsing initial policy for data augmentation
         self.good_policies = None
@@ -245,11 +247,15 @@ class TrainDataSet(object):
                     cur_pol.extend(parse_policy(pol[split:], self.augmentation_transforms))
                     self.policy.append(cur_pol)
                 tf.logging.info('using HP policy schedule, last: {}'.format(self.policy[-1]))
+                if self.comet_exp is not None:
+                    self.comet_exp.log_parameter('train_hp_policy_last', self.policy[-1])
             elif isinstance(raw_policy, list):
                 split = len(raw_policy) // 2
                 self.policy = parse_policy(raw_policy[:split], self.augmentation_transforms)
                 self.policy.extend(parse_policy(raw_policy[split:], self.augmentation_transforms))
                 tf.logging.info('using HP Policy, policy: {}'.format(self.policy))
+                if self.comet_exp is not None:
+                    self.comet_exp.log_parameter('search_hp_policy', self.policy)
         else:
             # use autoaugment policies modified for KITTI
             self.augmentation_transforms = augmentation_transforms_autoaug
@@ -283,6 +289,7 @@ class TrainDataSet(object):
             self.good_policies,
             self.policy,
             self.augmentation_transforms,
+            self.style_augmentor,
             self.input_height,
             self.input_width,
             self.hparams.flatten) for idx in indexes
@@ -325,10 +332,11 @@ class TrainDataSet(object):
         return self.data_loader
 
 
+# @ray.remote(num_gpus=0.10, max_calls=8)
 @ray.remote
 def augment_sample(
-        sample_idx, iteration, data_loader, no_aug_policy, use_hp_policy,
-        good_policies, policy, augmentation_transforms, input_height, input_width, flatten,
+        sample_idx, iteration, data_loader, no_aug_policy, use_hp_policy, good_policies,
+        policy, augmentation_transforms, style_augmentor, input_height, input_width, flatten,
 ):
     """
     :param sample_idx: index of sample to be read
@@ -339,6 +347,7 @@ def augment_sample(
     :param good_policies: autoaugment policy
     :param policy: parsed policy
     :param augmentation_transforms: augmentation function
+    :param style_augmentor: function that augments data with randomized style
     :param input_height: height of input image
     :param input_width: width of input image
     :param flatten: randomly select an aug policy from schedule
@@ -353,7 +362,10 @@ def augment_sample(
             # apply autoaugment policy here modified for KITTI
             epoch_policy = good_policies[np.random.choice(len(good_policies))]
             output_data = augmentation_transforms.apply_policy(
-                policy=epoch_policy, data=copy.copy(input_data), image_size=(input_height, input_width)
+                policy=epoch_policy,
+                data=copy.copy(input_data),
+                image_size=(input_height, input_width),
+                style_augmentor=style_augmentor
             )
         else:
             # apply learned policy for kitti
@@ -362,17 +374,24 @@ def augment_sample(
                 if flatten:
                     output_data = augmentation_transforms.apply_policy(
                         policy=policy[random.randint(0, len(policy) - 1)],
-                        data=copy.copy(input_data), image_size=(input_height, input_width)
+                        data=copy.copy(input_data),
+                        image_size=(input_height, input_width),
+                        style_augmentor=style_augmentor
                     )
                 else:
                     output_data = augmentation_transforms.apply_policy(
                         policy=policy[iteration-1],
-                        data=copy.copy(input_data), image_size=(input_height, input_width)
+                        data=copy.copy(input_data),
+                        image_size=(input_height, input_width),
+                        style_augmentor=style_augmentor
                     )
             elif isinstance(policy, list):
                 # policy schedule learning during search
                 output_data = augmentation_transforms.apply_policy(
-                    policy=policy, data=copy.copy(input_data), image_size=(input_height, input_width)
+                    policy=policy,
+                    data=copy.copy(input_data),
+                    image_size=(input_height, input_width),
+                    style_augmentor=style_augmentor
                 )
             else:
                 raise ValueError('Unknown policy.')

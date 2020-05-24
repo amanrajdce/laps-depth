@@ -3,7 +3,7 @@ kind: Job # Deployment will automatically restart when killed. Use Pod if not ne
 metadata:
   labels:
     k8s-app: research
-  generateName: amraj-search-5kt8-50q-16aug- # replace <your_name> with something that identifies you
+  generateName: amraj-search-5kt8-15aug-X-new- # replace <your_name> with something that identifies you
   namespace: ecewcsng
 spec:
   template:
@@ -14,7 +14,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: research
-        image: amanraj42/tensorflow-gpu-ray:v1.11
+        image: amanraj42/tf1.11-torch1.5-gpu-ray  # amanraj42/tf1.11-torch1.5-gpu-ray amanraj42/tensorflow-gpu-ray:v1.11
         imagePullPolicy: Always
         workingDir: /ceph/amanraj/codes/pba-signet
         command: ["/bin/sh"]                     # replace this with your own job execution scripts
@@ -22,12 +22,12 @@ spec:
         resources:
           requests:
             memory: "100Gi"          # requests 15Gi of memory every ray worker
-            cpu: "16"                # requests 2 CPU extras
+            cpu: "20"                # requests 2 CPU extras
             nvidia.com/gpu: 8       # requesting X GPU
             ephemeral-storage: 80Gi
           limits:
             memory: "100Gi"
-            cpu: "20"
+            cpu: "25"
             nvidia.com/gpu: 8
             ephemeral-storage: 80Gi
         volumeMounts:

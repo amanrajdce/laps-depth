@@ -22,7 +22,9 @@ import copy
 import collections
 import inspect
 import random
+import torch
 import tensorflow as tf
+from torchvision.transforms import ToTensor, ToPILImage
 
 import numpy as np
 from PIL import ImageOps, ImageEnhance, ImageFilter, Image  # pylint:disable=g-multiple-import
@@ -30,11 +32,17 @@ from PIL import ImageOps, ImageEnhance, ImageFilter, Image  # pylint:disable=g-m
 from pba.augmentation_transforms import random_flip, zero_pad_and_crop  # pylint: disable=unused-import
 from pba.augmentation_transforms import TransformFunction
 from pba.augmentation_transforms import pil_wrap, pil_unwrap  # pylint: disable=unused-import
-from pba.augmentation_transforms import PARAMETER_MAX, float_parameter  # pylint: disable=unused-import
+from pba.augmentation_transforms import PARAMETER_MAX, float_parameter, int_parameter  # pylint: disable=unused-import
 from pba.augmentation_transforms import _posterize_impl, _solarize_impl, _enhancer_impl
+from pba.augmentationsX import add_rain, add_snow, add_fog, add_speed
 
 
-def apply_policy(policy, data, image_size, verbose=False):
+# PyTorch Tensor <-> PIL Image transforms:
+toTensor = ToTensor()
+toPIL = ToPILImage()
+
+
+def apply_policy(policy, data, image_size, count, style_augmentor=None, verbose=False):
     """
     Apply the `policy` to the numpy `img`.
 
@@ -45,14 +53,17 @@ def apply_policy(policy, data, image_size, verbose=False):
         the operation to apply.
         data: Numpy image list that will have `policy` applied to it.
         image_size: (height, width) of image.
+        count: number of operations to apply
+        style_augmentor: function that augments data with randomized style
         verbose: Whether to print applied augmentations.
 
     Returns:
         The result of applying `policy` to `data`.
     """
     # PBA cifar10 policy modified
-    count = np.random.choice([0, 1, 2, 3], p=[0.10, 0.20, 0.30, 0.40])
-    # count = np.random.choice([0, 1, 2, 3], p=[0.2, 0.3, 0.5, 0.0])
+    # count = np.random.choice([0, 1, 2, 3], p=[0.10, 0.20, 0.30, 0.40]) # old
+    count = np.random.choice([0, 1, 2, 3], p=[0.20, 0.20, 0.50, 0.10])  # new
+    # count = np.random.choice([0, 1, 2, 3], p=[0.2, 0.3, 0.5, 0.0])  # original
 
     if count != 0:
         data['img_data'] = pil_wrap(data['img_data'])
@@ -63,7 +74,7 @@ def apply_policy(policy, data, image_size, verbose=False):
             name, probability, level = xform
             assert 0. <= probability <= 1.
             assert 0 <= level <= PARAMETER_MAX
-            xform_fn = NAME_TO_TRANSFORM[name].pil_transformer(probability, level, image_size)
+            xform_fn = NAME_TO_TRANSFORM[name].pil_transformer(probability, level, image_size, style_augmentor)
             data, res = xform_fn(data)
             if verbose and res:
                 tf.logging.info("Op: {}, Magnitude: {}, Prob: {}".format(name, level, probability))
@@ -84,17 +95,19 @@ class TransformT(object):
         self.name = name
         self.xform = xform_fn
 
-    def pil_transformer(self, probability, level, image_size):
+    def pil_transformer(self, probability, level, image_size, style_augmentor):
         """Builds augmentation function which returns resulting image and whether augmentation was applied."""
 
         def return_function(data):
             res = False
             if random.random() < probability:
                 func_args = inspect.getargspec(self.xform).args
-                if 'data' in func_args and 'image_size' in func_args:
-                    data = self.xform(data, level, image_size)  # transform that modifies intrinsic also
+                if 'data' in func_args and 'style_augmentor' in func_args:
+                    data = self.xform(data, level, style_augmentor)  # for _style_aug_impl
+                elif 'data' in func_args and 'image_size' in func_args:
+                    data = self.xform(data, level, image_size)  # for _scale_crop_pil_impl
                 elif 'image_size' in func_args:
-                    data['img_data'] = [self.xform(im, level, image_size) for im in data['img_data']]  # transform that modifies only imgs
+                    data['img_data'] = [self.xform(im, level, image_size) for im in data['img_data']]
                 else:
                     data['img_data'] = [self.xform(im, level) for im in data['img_data']]
                 res = True
@@ -133,20 +146,6 @@ def _crop_impl(pil_img, level, image_size, interpolation=Image.BILINEAR):
     cropped = pil_img.crop((level, level, image_size - level, image_size - level))
     resized = cropped.resize((image_size, image_size), interpolation)
     return resized
-
-
-def int_parameter(level, maxval):
-    """Helper function to scale `val` between 0 and maxval .
-
-  Args:
-    level: Level of the operation that will be between [0, `PARAMETER_MAX`].
-    maxval: Maximum value that the operation can have. This will be scaled
-      to level/PARAMETER_MAX.
-
-  Returns:
-    An int that results from scaling `maxval` according to `level`.
-  """
-    return int(level * maxval / PARAMETER_MAX)
 
 
 def create_cutout_mask(img_height, img_width, num_channels, size):
@@ -231,6 +230,68 @@ def _scale_crop_pil_impl(data, level, image_size):
     return data
 
 
+def _random_style_aug_impl(data, level, style_augmentor):
+    img_data = data['img_data']
+    alpha = float_parameter(level, maxval=0.50)
+    # style function, toTensor->converts values to 0 to 1
+    im_torch = torch.cat([toTensor(im.convert('RGB')).unsqueeze(0) for im in img_data], dim=0)
+
+    # choose a random style:
+    im_restyled = style_augmentor(im_torch, alpha=alpha)
+    im_restyled = im_restyled.squeeze().cpu()  # value range is 0 to 1
+
+    im_restyled = [toPIL(im_restyled[idx, :, :, :]) for idx in range(im_restyled.size(0))]
+    data['img_data'] = [im.convert('RGBA') for im in im_restyled]  # values range is 0 to 255
+
+    return data
+
+
+def _rain_impl(data, level, image_size):
+    img_data = data['img_data']
+    img_data = [np.array(img.convert('RGB')) for img in img_data]
+    slant = int_parameter(level, maxval=20)
+    if random.random() < 0.5:
+        slant *= -1
+
+    img_data = add_rain(img_data, slant=slant)
+    img_data = [toPIL(img).convert('RGBA') for img in img_data]
+    data['img_data'] = img_data
+
+    return data
+
+
+def _snow_impl(data, level, image_size):
+    img_data = data['img_data']
+    img_data = [np.array(img.convert('RGB')) for img in img_data]
+    snow_coeff = float_parameter(level, maxval=0.5)
+    img_data = add_snow(img_data, snow_coeff=snow_coeff)
+    img_data = [toPIL(img).convert('RGBA') for img in img_data]
+    data['img_data'] = img_data
+
+    return data
+
+
+def _fog_impl(data, level, image_size):
+    img_data = data['img_data']
+    img_data = [np.array(img.convert('RGB')) for img in img_data]
+    fog_coeff = 0.3 + float_parameter(level, maxval=0.4)
+    img_data = add_fog(img_data, fog_coeff=fog_coeff)
+    img_data = [toPIL(img).convert('RGBA') for img in img_data]
+    data['img_data'] = img_data
+
+    return data
+
+
+def _speed_blur_impl(data, level, image_size):
+    img_data = data['img_data']
+    img_data = [np.array(img.convert('RGB')) for img in img_data]
+    img_data = add_speed(img_data, speed_coeff=0.1)
+    img_data = [toPIL(img).convert('RGBA') for img in img_data]
+    data['img_data'] = img_data
+
+    return data
+
+
 cutout = TransformT('Cutout', _cutout_pil_impl)
 crop_bilinear = TransformT('CropBilinear', _crop_impl)
 solarize = TransformT('Solarize', _solarize_impl)
@@ -240,6 +301,11 @@ brightness = TransformT('Brightness', _enhancer_impl(ImageEnhance.Brightness))
 sharpness = TransformT('Sharpness', _enhancer_impl(ImageEnhance.Sharpness))
 scale_crop = TransformT('ScaleCrop', _scale_crop_pil_impl)
 flip_lr = TransformT('FlipLR', lambda pil_img, level: pil_img.transpose(Image.FLIP_LEFT_RIGHT))
+random_style = TransformT('RandomStyle', _random_style_aug_impl)
+rain = TransformT('Rain', _rain_impl)
+snow = TransformT('Snow', _snow_impl)
+fog = TransformT('Fog', _fog_impl)
+speed_blur = TransformT('SpeedBlur', _speed_blur_impl)
 
 HP_TRANSFORMS = [
     brightness,
@@ -252,12 +318,17 @@ HP_TRANSFORMS = [
     auto_contrast,
     cutout,
     contrast,
-    #blur,   # Added new stuffs from here
-    #smooth,
-    #edge_enhance,
+    #random_style,
+    blur,   # Added new stuffs from here
+    smooth,
+    edge_enhance,
     #contour,
-    #flip_lr,
-    #scale_crop
+    flip_lr,
+    scale_crop,
+    rain,  # augmentations X from here
+    snow,
+    fog,
+    speed_blur,
 ]
 # TODO crop_bilinear
 

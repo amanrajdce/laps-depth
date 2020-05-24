@@ -26,11 +26,13 @@ import time
 
 import numpy as np
 import tensorflow as tf
+import torch
 import gc
 
 import pba.data_utils as data_utils
 import pba.helper_utils as helper_utils
 from pba.sig_model import Model
+from styleaug.styleAugmentor import StyleAugmentor
 
 
 class ModelTrainer(object):
@@ -45,8 +47,15 @@ class ModelTrainer(object):
         self.hparams = hparams
         self.comet_exp = comet_exp
         self.last_ckpt_dir = None
+        self.style_augmentor = None
+        if self.hparams.use_style_aug:
+            # create style augmentor for randomized style data augmentation
+            device = torch.device('cuda')
+            tf.logging.info("Selected device: {}".format(device))
+            tf.logging.info("Using randomized style augmentation")
+            self.style_augmentor = StyleAugmentor(device)
 
-        self.dataset = data_utils.TrainDataSet(hparams)
+        self.dataset = data_utils.TrainDataSet(hparams, self.style_augmentor, self.comet_exp)
         self.train_size = self.dataset.train_size
         self.data_loader = self.dataset.load_data()
         self.steps_per_epoch = int(self.train_size / self.hparams.batch_size)

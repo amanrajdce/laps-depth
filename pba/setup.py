@@ -104,6 +104,11 @@ def create_parser(state):
         action='store_true',
         help='use augmentation strategy from SIGNet for KITTI rather than using any aug policy'
     )
+    parser.add_argument(
+        '--use_style_aug',
+        action='store_true',
+        help='use style as augmentation for images also.'
+    )
 
     # Policy settings
     if state == 'train':
@@ -206,7 +211,8 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         disable_comet=FLAGS.disable_comet,
         optimizer=FLAGS.optimizer,
         local_dir=FLAGS.local_dir,
-        monodepth2=FLAGS.monodepth2)
+        monodepth2=FLAGS.monodepth2,
+        use_style_aug=FLAGS.use_style_aug)
 
     if state == 'train':
         hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)
