@@ -54,7 +54,7 @@ class StyleAugmentor(nn.Module):
         return embedding
 
     def forward(
-        self, x, alpha=0.5, downsamples=0, embedding=None, useStylePredictor=True, detach=True
+        self, x, alpha=0.5, downsamples=0, embedding=None, useStylePredictor=True, detach=True, style_image=None
     ):
         # augments a batch of images with style randomization
         # x: B x C x H x W image tensor
@@ -65,6 +65,8 @@ class StyleAugmentor(nn.Module):
         # detach: bool. If true, detach the augmented image tensor to prevent backpropagation into self.ghiasi and self.stylePredictor
 
         x = x.to(self.device)
+        if style_image is not None:
+            style_image = style_image.to(self.device)
 
         # style embedding for when alpha=0:
         base = self.stylePredictor(x) if useStylePredictor else self.imagenet_embedding
@@ -76,10 +78,13 @@ class StyleAugmentor(nn.Module):
                 x = nn.functional.avg_pool2d(x, 2)
 
         if embedding is None:
-            # sample a random embedding
-            embedding = self.sample_embedding(1)  # 1 x 100
+            # either sample a random embedding or generate embedding using provide style image
+            if style_image is not None:
+                embedding = self.stylePredictor(style_image)
+            else:
+                embedding = self.sample_embedding(1)  # 1 x 100
         else:
-            embedding = embedding.to(self.device)  # 1 x 100
+            embedding = embedding.to(self.device)  # 1 x 100, else provide saved embedding to speed up training
 
         # generate copy of same embedding for given batch
         embedding = torch.cat([embedding.clone() for _ in range(x.size(0))], dim=0)

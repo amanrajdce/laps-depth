@@ -42,7 +42,7 @@ toTensor = ToTensor()
 toPIL = ToPILImage()
 
 
-def apply_policy(policy, data, image_size, count, style_augmentor=None, verbose=False):
+def apply_policy(policy, data, image_size, style_augmentor=None, verbose=False):
     """
     Apply the `policy` to the numpy `img`.
 
@@ -63,6 +63,7 @@ def apply_policy(policy, data, image_size, count, style_augmentor=None, verbose=
     # PBA cifar10 policy modified
     # count = np.random.choice([0, 1, 2, 3], p=[0.10, 0.20, 0.30, 0.40]) # old
     count = np.random.choice([0, 1, 2, 3], p=[0.20, 0.20, 0.50, 0.10])  # new
+    #count = np.random.choice([0, 1, 2], p=[0.30, 0.50, 0.20])  # new2
     # count = np.random.choice([0, 1, 2, 3], p=[0.2, 0.3, 0.5, 0.0])  # original
 
     if count != 0:
@@ -319,16 +320,16 @@ HP_TRANSFORMS = [
     cutout,
     contrast,
     #random_style,
-    blur,   # Added new stuffs from here
-    smooth,
-    edge_enhance,
+    #blur,   # Added new stuffs from here
+    #smooth,
+    #edge_enhance,
     #contour,
-    flip_lr,
-    scale_crop,
-    rain,  # augmentations X from here
-    snow,
-    fog,
-    speed_blur,
+    #flip_lr,
+    #scale_crop,
+    #rain,  # augmentations X from here
+    #snow,
+    #fog,
+    #speed_blur,
 ]
 # TODO crop_bilinear
 

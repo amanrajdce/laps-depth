@@ -3,7 +3,7 @@ kind: Job # Deployment will automatically restart when killed. Use Pod if not ne
 metadata:
   labels:
     k8s-app: research
-  generateName: amraj-train-m2-p4-50q-16aug- # replace <your_name> with something that identifies you
+  generateName: amraj-train-m2-kitti-aug- # replace <your_name> with something that identifies you
   namespace: ecewcsng
 spec:
   template:
@@ -18,7 +18,7 @@ spec:
         imagePullPolicy: Always
         workingDir: /ceph/amanraj/codes/pba-signet
         command: ["/bin/sh"]                     # replace this with your own job execution scripts
-        args: ["pod/train_mono2.sh", "pod", "00004"]
+        args: ["pod/train_mono2_bsl.sh", "pod", "00004"]
         resources:
           requests:
             memory: "15Gi"          # requests 15Gi of memory minimum
