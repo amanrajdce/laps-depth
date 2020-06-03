@@ -14,9 +14,8 @@ train_hp_kitti() {
   test_file_path="$kitti_raw/test_files_eigen.txt"
   gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-  name="train_hp_search-5kt8_mono2_15aug_X_newprob"
-  hp_policy="$local_dir/search_train_5k_t8_mono2_15aug_X_newprob/pbt_policy_$2.txt"
-  restore="$local_dir/train_hp_search-5kt8_mono2_15aug_X_newprob/RayModel_0_2020-05-26_07-57-501pjwg1f9/checkpoint_30/model.ckpt-30"
+  name="train_hp_random_single_policy"
+  # restore="$local_dir/train_hp_search-5kt2-max-25q-mono2_higher/checkpoint_17/model.ckpt-17"
 
   python pba/train.py \
     --local_dir "$local_dir" \
@@ -28,14 +27,11 @@ train_hp_kitti() {
     --name "$name" --scale_normalize \
     --checkpoint_freq 1 --checkpoint_iter 2000 --checkpoint_iter_after 10 \
     --batch_size 8 --lr 0.0002 --lr_decay step \
-    --gpu 1 --cpu 3 --epochs 35 --log_iter 1000 --monodepth2 \
-    --use_hp_policy --hp_policy "$hp_policy" --hp_policy_epochs 35 --restore $restore
-    # --use_style_aug
-    #--restore $restore \
+    --gpu 1 --cpu 4 --epochs 35 --log_iter 1000 --monodepth2 \
+    --use_hp_policy --hp_policy random --hp_policy_epochs 35
+    # --restore $restore \
     # --disable_comet
-    #
-
-    # CUDA_VISIBLE_DEVICES=3 bash pod/train_mono2.sh local 00007
+    # CUDA_VISIBLE_DEVICES=1 bash pod/train_mono2_rand_single.sh local
 }
 
 mode=${1:-local} # defaults to local mode of deployment

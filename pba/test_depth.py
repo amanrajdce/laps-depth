@@ -162,7 +162,7 @@ def main(args, logger):
         results, preds = tester.run_evaluation(verbose=False)
         res = ",".join([str((k, v)) for k, v in results.items()])
         logger.info("Result:{}".format(res))
-        save_dir = os.path.join(os.path.dirname(ckpt), "predictions")
+        save_dir = os.path.join(os.path.dirname(ckpt), "predictions", args.name)
 
         if args.save_pred:
             logger.info("Saving predictions: {}".format(save_dir))

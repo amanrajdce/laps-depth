@@ -4,6 +4,7 @@ Generate KITTI Eigen split data with weather effects such as rain, snow, fog, sp
 python gen_kitti_weather_data.py
 """
 import PIL.Image as pil
+from PIL import ImageEnhance
 import os
 import argparse
 import numpy as np
@@ -16,6 +17,8 @@ toPIL = ToPILImage()
 
 
 def add_random_rain(img, seed=0):
+    bright_coeff = 0.8
+    img = ImageEnhance.Brightness(img.convert('RGB')).enhance(bright_coeff)
     img_data = [np.array(img)]
     # generate random slant for rain droplets
     np.random.seed(seed)
@@ -40,7 +43,7 @@ def add_random_fog(img, seed=0):
     img_data = [np.array(img)]
     np.random.seed(seed)
     _coeff = np.random.uniform(0, 0.41)
-    fog_coeff = 0.3 + _coeff
+    fog_coeff = 0.2 + _coeff
     img_data = add_fog(img_data, fog_coeff=fog_coeff)
     img_data = [toPIL(img).convert('RGB') for img in img_data]
 

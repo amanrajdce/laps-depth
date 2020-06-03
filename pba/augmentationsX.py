@@ -42,14 +42,8 @@ def rain_process(image, slant, drop_length, drop_color, drop_width, rain_drops):
             (rain_drop[0] + slant, rain_drop[1] + drop_length),
             drop_color, drop_width
         )
-    image = cv2.blur(image_t, (4, 4))  ## rainy view are blurry
-    brightness_coefficient = 0.8  ## rainy days are usually shady
-    image_HLS = hls(image)  ## Conversion to HLS
-    image_HLS[:, :, 1] = image_HLS[:, :,
-                         1] * brightness_coefficient  ## scale pixel values down for channel 1(Lightness)
-    image_RGB = rgb(image_HLS)  ## Conversion to RGB
-
-    return image_RGB
+    image = cv2.blur(image_t, (4, 4))  # rainy view are blurry
+    return image
 
 
 def add_rain(img_data, slant):  # (-20 <= slant <= 20)

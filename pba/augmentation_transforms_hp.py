@@ -249,7 +249,10 @@ def _random_style_aug_impl(data, level, style_augmentor):
 
 def _rain_impl(data, level, image_size):
     img_data = data['img_data']
-    img_data = [np.array(img.convert('RGB')) for img in img_data]
+    # rainy days are usually shady
+    bright_coeff = 0.8
+    img_data = [ImageEnhance.Brightness(img.convert('RGB')).enhance(bright_coeff) for img in img_data]
+    img_data = [np.array(img) for img in img_data]
     slant = int_parameter(level, maxval=20)
     if random.random() < 0.5:
         slant *= -1
@@ -320,16 +323,16 @@ HP_TRANSFORMS = [
     cutout,
     contrast,
     #random_style,
-    #blur,   # Added new stuffs from here
-    #smooth,
-    #edge_enhance,
+    blur,   # Added new stuffs from here
+    smooth,
+    edge_enhance,
     #contour,
-    #flip_lr,
-    #scale_crop,
-    #rain,  # augmentations X from here
-    #snow,
-    #fog,
-    #speed_blur,
+    flip_lr,
+    scale_crop,
+    rain,  # augmentations X from here
+    snow,
+    fog,
+    speed_blur,
 ]
 # TODO crop_bilinear
 

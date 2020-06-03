@@ -1,14 +1,17 @@
 #!/bin/bash
 export PYTHONPATH="$(pwd)"
 
+kitti_test_name="kitti_raw_eigen_test"
+#kitti_test_name="kitti_raw_eigen_test_weather"
+#kitti_test_name="kitti_raw_eigen_test_weather_single"
+
 local_dir="/ceph/amanraj/results"
 data_root="/ceph/amanraj/data"
-kitti_raw="$data_root/kitti_raw_eigen_test"
+kitti_raw="$data_root/$kitti_test_name"
 test_file_path="$kitti_raw/test_files_eigen.txt"
 gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
-name="kitti_evaluation"
 
-ckpt_path="$local_dir/paper/train_hp_search-5kt2-max-25q-mono2/policy1_run1/checkpoint_16/model.ckpt-16"
+ckpt_path="$local_dir/train_hp_search-5kt8_mono2_15aug_X_newprob/RayModel_0_2020-05-26_07-57-501pjwg1f9/checkpoint_itr158000/model.ckpt-158000"
 
 python pba/test_depth.py \
   --ckpt_path "$ckpt_path" \
@@ -17,7 +20,7 @@ python pba/test_depth.py \
   --gt_path "$gt_path" \
   --test_batch_size 1 \
   --scale_normalize \
-  --name "$name" \
+  --name "$kitti_test_name" \
   --save_pred
 
 

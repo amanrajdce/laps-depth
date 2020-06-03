@@ -18,7 +18,7 @@ spec:
         imagePullPolicy: Always
         workingDir: /ceph/amanraj/codes/pba-signet
         command: ["/bin/sh"]                     # replace this with your own job execution scripts
-        args: ["pod/train_mono2_higher.sh", "pod", "00001"]
+        args: ["pod/train_mono2_rand_single.sh", "pod", "00001"]
         resources:
           requests:
             memory: "15Gi"          # requests 15Gi of memory minimum

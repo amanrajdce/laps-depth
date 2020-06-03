@@ -228,7 +228,7 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
                         parsed_policy.append(random.randint(0, 10))
                     else:
                         parsed_policy.append(random.randint(0, 9))
-            elif FLAGS.hp_policy.endswith('.txt') or FLAGS.hp_policy.endswith('.p'):
+            elif FLAGS.hp_policy.endswith('.txt'):
                 # will be loaded in in data_utils
                 parsed_policy = FLAGS.hp_policy
             else:

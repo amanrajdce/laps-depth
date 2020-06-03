@@ -227,15 +227,6 @@ class TrainDataSet(object):
                     epochs=hparams.hp_policy_epochs,
                     multiplier=float(hparams.num_epochs) / hparams.hp_policy_epochs
                 )
-            elif isinstance(hparams.hp_policy, str) and hparams.hp_policy.endswith('.p'):
-                assert hparams.num_epochs % hparams.hp_policy_epochs == 0
-                tf.logging.info('custom .p file, policy number: {}'.format(hparams.schedule_num))
-                with open(hparams.hp_policy, 'rb') as f:
-                    policy = pickle.load(f)[hparams.schedule_num]
-                raw_policy = []
-                for num_iters, pol in policy:
-                    for _ in range(num_iters * hparams.num_epochs // hparams.hp_policy_epochs):
-                        raw_policy.append(pol)
             else:
                 raw_policy = hparams.hp_policy
 
@@ -248,14 +239,14 @@ class TrainDataSet(object):
                     self.policy.append(cur_pol)
                 tf.logging.info('using HP policy schedule, last: {}'.format(self.policy[-1]))
                 if self.comet_exp is not None:
-                    self.comet_exp.log_parameter('train_hp_policy_last', self.policy[-1])
+                    self.comet_exp.log_parameter('hp_policy_schedule_last', self.policy[-1])
             elif isinstance(raw_policy, list):
                 split = len(raw_policy) // 2
                 self.policy = parse_policy(raw_policy[:split], self.augmentation_transforms)
                 self.policy.extend(parse_policy(raw_policy[split:], self.augmentation_transforms))
                 tf.logging.info('using HP Policy, policy: {}'.format(self.policy))
                 if self.comet_exp is not None:
-                    self.comet_exp.log_parameter('search_hp_policy', self.policy)
+                    self.comet_exp.log_parameter('hp_policy', self.policy)
         else:
             # use autoaugment policies modified for KITTI
             self.augmentation_transforms = augmentation_transforms_autoaug
@@ -386,7 +377,7 @@ def augment_sample(
                         style_augmentor=style_augmentor
                     )
             elif isinstance(policy, list):
-                # policy schedule learning during search
+                # policy schedule learning during search or a random single policy
                 output_data = augmentation_transforms.apply_policy(
                     policy=policy,
                     data=copy.copy(input_data),
