@@ -24,8 +24,7 @@ python pba/search.py \
   --checkpoint_freq 0 \
   --gpu 1 --cpu 3 --epochs 10 --num_samples 2 \
   --perturbation_interval 1 --log_iter 40 \
-  --scale_normalize --name "$name" --monodepth2 \
-  --fliplr_random --cutout_random
+  --scale_normalize --name "$name" --monodepth2
 
   #--use_style_aug
   #--disable_comet

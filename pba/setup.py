@@ -235,7 +235,7 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
             if FLAGS.hp_policy == 'random':
                 tf.logging.info('RANDOM SEARCH')
                 parsed_policy = []
-                for i in range(NUM_HP_TRANSFORM * 4):
+                for i in range(NUM_HP_TRANSFORM * 2):
                     if i % 2 == 0:
                         parsed_policy.append(random.randint(0, 10))
                     else:
@@ -253,7 +253,7 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         hparams.add_hparam('no_aug_policy', False)
         hparams.add_hparam('use_hp_policy', True)
         # default start value of 0
-        hparams.add_hparam('hp_policy', [0 for _ in range(4 * NUM_HP_TRANSFORM)])
+        hparams.add_hparam('hp_policy', [0 for _ in range(2 * NUM_HP_TRANSFORM)])
         hparams.add_hparam('perturbation_interval', FLAGS.perturbation_interval)
         hparams.add_hparam('checkpoint_iter', 0)
         hparams.add_hparam('checkpoint_iter_after', 0)

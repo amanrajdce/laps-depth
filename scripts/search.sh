@@ -13,7 +13,7 @@ search_kitti() {
   test_file_path="$kitti_raw/test_files_eigen.txt"
   gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-  name="search_train_5kt8_reduceX_newprob"
+  name="search_train_5kt8_half_ops_newprob"
 
   python pba/search.py \
     --local_dir "$local_dir" \
@@ -26,8 +26,7 @@ search_kitti() {
     --checkpoint_freq 0 \
     --gpu 1 --cpu 3 --epochs 35 --num_samples 8 \
     --perturbation_interval 1 --log_iter 250 \
-    --scale_normalize --name "$name" --monodepth2 \
-    --fliplr_random --cutout_random
+    --scale_normalize --name "$name" --monodepth2
 
     #--use_style_aug
 

@@ -340,7 +340,7 @@ snow = TransformT('Snow', _snow_impl)
 fog = TransformT('Fog', _fog_impl)
 speed_blur = TransformT('SpeedBlur', _speed_blur_impl)
 
-"""
+
 HP_TRANSFORMS = [
     brightness,
     color,
@@ -379,6 +379,7 @@ HP_TRANSFORMS = [
     fog,
     speed_blur,
 ]
+"""
 
 NAME_TO_TRANSFORM = collections.OrderedDict((t.name, t) for t in HP_TRANSFORMS)
 HP_TRANSFORM_NAMES = NAME_TO_TRANSFORM.keys()

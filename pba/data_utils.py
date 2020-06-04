@@ -232,18 +232,20 @@ class TrainDataSet(object):
 
             if isinstance(raw_policy[0], list):
                 self.policy = []
-                split = len(raw_policy[0]) // 2
+                # split = len(raw_policy[0]) // 2
+                split = len(raw_policy[0])
                 for pol in raw_policy:
                     cur_pol = parse_policy(pol[:split], self.augmentation_transforms)
-                    cur_pol.extend(parse_policy(pol[split:], self.augmentation_transforms))
+                    # cur_pol.extend(parse_policy(pol[split:], self.augmentation_transforms))
                     self.policy.append(cur_pol)
                 tf.logging.info('using HP policy schedule, last: {}'.format(self.policy[-1]))
                 if self.comet_exp is not None:
                     self.comet_exp.log_parameter('hp_policy_schedule_last', self.policy[-1])
             elif isinstance(raw_policy, list):
-                split = len(raw_policy) // 2
+                # split = len(raw_policy) // 2
+                split = len(raw_policy)
                 self.policy = parse_policy(raw_policy[:split], self.augmentation_transforms)
-                self.policy.extend(parse_policy(raw_policy[split:], self.augmentation_transforms))
+                # self.policy.extend(parse_policy(raw_policy[split:], self.augmentation_transforms))
                 tf.logging.info('using HP Policy, policy: {}'.format(self.policy))
                 if self.comet_exp is not None:
                     self.comet_exp.log_parameter('hp_policy', self.policy)
