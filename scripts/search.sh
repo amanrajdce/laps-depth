@@ -13,7 +13,7 @@ search_kitti() {
   test_file_path="$kitti_raw/test_files_eigen.txt"
   gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-  name="search_train_5k_t2_mono2_newprob"
+  name="search_train_5kt2_mag_newprob"
 
   python pba/search.py \
     --local_dir "$local_dir" \
@@ -26,7 +26,7 @@ search_kitti() {
     --checkpoint_freq 0 \
     --gpu 1 --cpu 3 --epochs 35 --num_samples 2 \
     --perturbation_interval 1 --log_iter 250 \
-    --scale_normalize --name "$name" --monodepth2 #--use_style_aug
+    --scale_normalize --name "$name" --monodepth2
 
   # SIGNet was trained for approx 35 epochs.
   # batch_size=4, lr=0.0002, no lr_decay

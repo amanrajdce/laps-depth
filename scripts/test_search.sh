@@ -24,10 +24,10 @@ python pba/search.py \
   --checkpoint_freq 0 \
   --gpu 1 --cpu 3 --epochs 10 --num_samples 2 \
   --perturbation_interval 1 --log_iter 40 \
-  --scale_normalize --name "$name" --monodepth2 #--use_style_aug
+  --scale_normalize --name "$name" --monodepth2
   #--disable_comet
 
 # SIGNet was trained for approx 35 epochs.
 # batch_size=4, lr=0.0002, no lr_decay
 
-# CUDA_VISIBLE_DEVICES=0 bash ./scripts/test_search.sh
+# CUDA_VISIBLE_DEVICES=2,3 bash ./scripts/test_search.sh

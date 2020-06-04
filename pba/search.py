@@ -54,22 +54,20 @@ def main(_):
         new_params = []
 
         for i, param in enumerate(config["hp_policy"]):
-            if random.random() < 0.2:
-                if i % 2 == 0:
-                    new_params.append(random.randint(0, 10))
-                else:
-                    new_params.append(random.randint(0, 9))
+            if i % 2 == 0:
+                new_params.append(param)  # no change to probability
             else:
-                amt = np.random.choice([0, 1, 2, 3], p=[0.25, 0.25, 0.25, 0.25])
-                # Cast np.int64 to int for py3 json
-                amt = int(amt)
-                if random.random() < 0.5:
-                    new_params.append(max(0, param - amt))
+                if random.random() < 0.2:
+                    new_params.append(random.randint(0, 9))
                 else:
-                    if i % 2 == 0:
-                        new_params.append(min(10, param + amt))
+                    amt = np.random.choice([0, 1, 2, 3], p=[0.25, 0.25, 0.25, 0.25])
+                    # Cast np.int64 to int for py3 json
+                    amt = int(amt)
+                    if random.random() < 0.5:
+                        new_params.append(max(0, param - amt))
                     else:
                         new_params.append(min(9, param + amt))
+
         config["hp_policy"] = new_params
         return config
 

@@ -162,7 +162,7 @@ def parse_policy(policy_emb, augmentation_transforms):
     assert len(policy_emb) == 2 * num_xform, 'policy was: {}, supposed to be: {}'.format(len(policy_emb), 2 * num_xform)
 
     for i, xform in enumerate(xform_names):
-        policy.append((xform, policy_emb[2 * i] / 10., policy_emb[2 * i + 1]))
+        policy.append((xform, policy_emb[2 * i], policy_emb[2 * i + 1]))
     return policy
 
 
@@ -323,7 +323,6 @@ class TrainDataSet(object):
         return self.data_loader
 
 
-# @ray.remote(num_gpus=0.10, max_calls=8)
 @ray.remote
 def augment_sample(
         sample_idx, iteration, data_loader, no_aug_policy, use_hp_policy, good_policies,

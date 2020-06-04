@@ -240,8 +240,13 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
     elif state == 'search':
         hparams.add_hparam('no_aug_policy', False)
         hparams.add_hparam('use_hp_policy', True)
-        # default start value of 0
-        hparams.add_hparam('hp_policy', [0 for _ in range(4 * NUM_HP_TRANSFORM)])
+        # default start value of 0 for mag and 1/K for probability
+        hp_policy = [0 for _ in range(4 * NUM_HP_TRANSFORM)]
+        for i, param in enumerate(hp_policy):
+            if i % 2 == 0:
+                hp_policy[i] = round(1. / NUM_HP_TRANSFORM, 5)
+
+        hparams.add_hparam('hp_policy', hp_policy)
         hparams.add_hparam('perturbation_interval', FLAGS.perturbation_interval)
         hparams.add_hparam('checkpoint_iter', 0)
         hparams.add_hparam('checkpoint_iter_after', 0)
