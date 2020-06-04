@@ -109,6 +109,16 @@ def create_parser(state):
         action='store_true',
         help='use style as augmentation for images also.'
     )
+    parser.add_argument(
+        '--fliplr_random',
+        action='store_true',
+        help='if enabled randomly fliplr images with 50% probability'
+    )
+    parser.add_argument(
+        '--cutout_random',
+        action='store_true',
+        help='if enabled randomly cutout patchsize of 20x20 images with 50% probability'
+    )
 
     # Policy settings
     if state == 'train':
@@ -212,7 +222,9 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
         optimizer=FLAGS.optimizer,
         local_dir=FLAGS.local_dir,
         monodepth2=FLAGS.monodepth2,
-        use_style_aug=FLAGS.use_style_aug)
+        use_style_aug=FLAGS.use_style_aug,
+        fliplr_random=FLAGS.fliplr_random,
+        cutout_random=FLAGS.cutout_random)
 
     if state == 'train':
         hparams.add_hparam('no_aug_policy', FLAGS.no_aug_policy)

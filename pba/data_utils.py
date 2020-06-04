@@ -283,6 +283,8 @@ class TrainDataSet(object):
             self.style_augmentor,
             self.input_height,
             self.input_width,
+            self.hparams.fliplr_random,
+            self.hparams.cutout_random,
             self.hparams.flatten) for idx in indexes
         ]
         res = ray.get(batch)
@@ -326,8 +328,8 @@ class TrainDataSet(object):
 # @ray.remote(num_gpus=0.10, max_calls=8)
 @ray.remote
 def augment_sample(
-        sample_idx, iteration, data_loader, no_aug_policy, use_hp_policy, good_policies,
-        policy, augmentation_transforms, style_augmentor, input_height, input_width, flatten,
+        sample_idx, iteration, data_loader, no_aug_policy, use_hp_policy, good_policies, policy,
+        augmentation_transforms, style_augmentor, input_height, input_width, fliplr_random, cutout_random, flatten,
 ):
     """
     :param sample_idx: index of sample to be read
@@ -341,6 +343,8 @@ def augment_sample(
     :param style_augmentor: function that augments data with randomized style
     :param input_height: height of input image
     :param input_width: width of input image
+    :param fliplr_random: randomly fliplr
+    :param cutout_random: randomly cutout mask
     :param flatten: randomly select an aug policy from schedule
     :return: return original and augmented sample
     """
@@ -367,14 +371,18 @@ def augment_sample(
                         policy=policy[random.randint(0, len(policy) - 1)],
                         data=copy.copy(input_data),
                         image_size=(input_height, input_width),
-                        style_augmentor=style_augmentor
+                        style_augmentor=style_augmentor,
+                        fliplr=fliplr_random,
+                        cutout=cutout_random
                     )
                 else:
                     output_data = augmentation_transforms.apply_policy(
                         policy=policy[iteration-1],
                         data=copy.copy(input_data),
                         image_size=(input_height, input_width),
-                        style_augmentor=style_augmentor
+                        style_augmentor=style_augmentor,
+                        fliplr=fliplr_random,
+                        cutout=cutout_random
                     )
             elif isinstance(policy, list):
                 # policy schedule learning during search or a random single policy
@@ -382,7 +390,9 @@ def augment_sample(
                     policy=policy,
                     data=copy.copy(input_data),
                     image_size=(input_height, input_width),
-                    style_augmentor=style_augmentor
+                    style_augmentor=style_augmentor,
+                    fliplr=fliplr_random,
+                    cutout=cutout_random
                 )
             else:
                 raise ValueError('Unknown policy.')

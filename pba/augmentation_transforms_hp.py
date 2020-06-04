@@ -42,7 +42,7 @@ toTensor = ToTensor()
 toPIL = ToPILImage()
 
 
-def apply_policy(policy, data, image_size, style_augmentor=None, verbose=False):
+def apply_policy(policy, data, image_size, style_augmentor=None, fliplr=False, cutout=False, verbose=False):
     """
     Apply the `policy` to the numpy `img`.
 
@@ -55,6 +55,8 @@ def apply_policy(policy, data, image_size, style_augmentor=None, verbose=False):
         image_size: (height, width) of image.
         count: number of operations to apply
         style_augmentor: function that augments data with randomized style
+        fliplr: randomly flip the images
+        cutout: randomly apply a random cutout
         verbose: Whether to print applied augmentations.
 
     Returns:
@@ -84,9 +86,36 @@ def apply_policy(policy, data, image_size, style_augmentor=None, verbose=False):
             if count == 0:
                 break
         data['img_data'] = pil_unwrap(data['img_data'], image_size)  # apply pil_unwrap on imgs only
-        return data
-    else:
-        return data
+
+    # should be used only when flipr is not being learned in augmentation policy
+    if fliplr and random.random() > 0.5:
+        data['img_data'] = [np.fliplr(img) for img in data['img_data']]
+
+    # should be used only when cutout is not being learned in augmentation policy
+    if cutout and random.random() > 0.5:
+        data['img_data'] = [cutout_numpy(img, size=20) for img in data['img_data']]
+
+    return data
+
+
+def cutout_numpy(img, size=16):
+    """Apply cutout with mask of shape `size` x `size` to `img`.
+
+  The cutout operation is from the paper https://arxiv.org/abs/1708.04552.
+  This operation applies a `size`x`size` mask of zeros to a random location
+  within `img`.
+
+  Args:
+    img: Numpy image that cutout will be applied to.
+    size: Height/width of the cutout mask that will be
+
+  Returns:
+    A numpy tensor that is the result of applying the cutout mask to `img`.
+  """
+    img_height, img_width, num_channels = (img.shape[0], img.shape[1], img.shape[2])
+    assert len(img.shape) == 3
+    mask, _, _ = create_cutout_mask(img_height, img_width, num_channels, size)
+    return img * mask
 
 
 class TransformT(object):
@@ -311,6 +340,7 @@ snow = TransformT('Snow', _snow_impl)
 fog = TransformT('Fog', _fog_impl)
 speed_blur = TransformT('SpeedBlur', _speed_blur_impl)
 
+"""
 HP_TRANSFORMS = [
     brightness,
     color,
@@ -335,6 +365,20 @@ HP_TRANSFORMS = [
     speed_blur,
 ]
 # TODO crop_bilinear
+
+"""
+HP_TRANSFORMS = [
+    brightness,
+    color,
+    sharpness,
+    equalize,
+    auto_contrast,
+    smooth,
+    edge_enhance,
+    snow,
+    fog,
+    speed_blur,
+]
 
 NAME_TO_TRANSFORM = collections.OrderedDict((t.name, t) for t in HP_TRANSFORMS)
 HP_TRANSFORM_NAMES = NAME_TO_TRANSFORM.keys()
