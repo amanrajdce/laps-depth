@@ -3,7 +3,7 @@ kind: Job # Deployment will automatically restart when killed. Use Pod if not ne
 metadata:
   labels:
     k8s-app: research
-  generateName: amraj-search-5kt8-rx-newprob- # replace <your_name> with something that identifies you
+  generateName: amraj-search-5kt6-oneop-newprob- # replace <your_name> with something that identifies you
   namespace: ecewcsng
 spec:
   template:
@@ -23,12 +23,12 @@ spec:
           requests:
             memory: "100Gi"          # requests 15Gi of memory every ray worker
             cpu: "20"                # requests 2 CPU extras
-            nvidia.com/gpu: 8       # requesting X GPU
+            nvidia.com/gpu: 6       # requesting X GPU
             ephemeral-storage: 80Gi
           limits:
             memory: "100Gi"
             cpu: "25"
-            nvidia.com/gpu: 8
+            nvidia.com/gpu: 6
             ephemeral-storage: 80Gi
         volumeMounts:
         - mountPath: /dev/shm
