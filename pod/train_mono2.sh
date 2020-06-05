@@ -14,8 +14,8 @@ train_hp_kitti() {
   test_file_path="$kitti_raw/test_files_eigen.txt"
   gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
-  name="train_hp_search-5kt2_one_ops_newprob"
-  hp_policy="$local_dir/search_train_5kt2_one_ops_newprob/pbt_policy_$2.txt"
+  name="train_hp_search-5kt2_mag_newprob"
+  hp_policy="$local_dir/search_train_5kt2_mag_newprob/pbt_policy_$2.txt"
   # restore="$local_dir/train_hp_search-5kt8_mono2_15aug_X_newprob/RayModel_0_2020-05-26_07-57-501pjwg1f9/checkpoint_30/model.ckpt-30"
 
   python pba/train.py \
@@ -35,7 +35,7 @@ train_hp_kitti() {
     # --disable_comet
     #
 
-    # CUDA_VISIBLE_DEVICES=3 bash pod/train_mono2.sh local 00007
+    # CUDA_VISIBLE_DEVICES=2 bash pod/train_mono2.sh local 00001
 }
 
 mode=${1:-local} # defaults to local mode of deployment
