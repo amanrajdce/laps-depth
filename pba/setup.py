@@ -233,7 +233,7 @@ def create_hparams(state, FLAGS):  # pylint: disable=invalid-name
                 parsed_policy = FLAGS.hp_policy
             else:
                 # parse input into a fixed augmentation policy
-                parsed_policy = FLAGS.hp_policy.split(', ')
+                parsed_policy = FLAGS.hp_policy.split(',')
                 parsed_policy = [int(p) for p in parsed_policy]
             hparams.add_hparam('hp_policy', parsed_policy)
             hparams.add_hparam('hp_policy_epochs', FLAGS.hp_policy_epochs)
