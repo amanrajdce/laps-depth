@@ -3,7 +3,7 @@ kind: Job # Deployment will automatically restart when killed. Use Pod if not ne
 metadata:
   labels:
     k8s-app: research
-  generateName: amraj-train-reduceX-p1run2- # replace <your_name> with something that identifies you
+  generateName: amraj-train-reducex-p1run2- # replace <your_name> with something that identifies you
   namespace: ecewcsng
 spec:
   template:
