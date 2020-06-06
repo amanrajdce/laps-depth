@@ -16,7 +16,7 @@ train_hp_kitti() {
 
   name="train_hp_search-5kt8_mono2_reduceX_newprob"
   hp_policy="$local_dir/search_train_5kt8_reduceX_newprob/pbt_policy_$2.txt"
-  # restore="$local_dir/train_hp_search-5kt8_mono2_15aug_X_newprob/RayModel_0_2020-05-26_07-57-501pjwg1f9/checkpoint_30/model.ckpt-30"
+  restore="$local_dir/train_hp_search-5kt8_mono2_reduceX_newprob/RayModel_0_2020-06-04_10-10-17ngxeqnd3/checkpoint_14/model.ckpt-14"
 
   python pba/train.py \
     --local_dir "$local_dir" \
@@ -30,8 +30,7 @@ train_hp_kitti() {
     --batch_size 8 --lr 0.0002 --lr_decay step \
     --gpu 1 --cpu 3 --epochs 35 --log_iter 1000 --monodepth2 \
     --use_hp_policy --hp_policy "$hp_policy" --hp_policy_epochs 35 \
-    --fliplr_random --cutout_random
-    # --restore $restore
+    --fliplr_random --cutout_random --restore $restore
     # --disable_comet
 
     # CUDA_VISIBLE_DEVICES=3 bash pod/train_mono2.sh local 00007
