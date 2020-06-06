@@ -16,7 +16,7 @@ train_hp_kitti() {
 
   name="train_hp_search-5kt8_mono2_reduceX_newprob"
   hp_policy="$local_dir/search_train_5kt8_reduceX_newprob/pbt_policy_$2.txt"
-  restore="$local_dir/train_hp_search-5kt8_mono2_reduceX_newprob/RayModel_0_2020-06-04_10-10-17ngxeqnd3/checkpoint_14/model.ckpt-14"
+  restore="$local_dir/train_hp_search-5kt8_mono2_reduceX_newprob/RayModel_0_2020-06-04_10-11-03zkq15hf7/checkpoint_21/model.ckpt-21"
 
   python pba/train.py \
     --local_dir "$local_dir" \
@@ -33,7 +33,7 @@ train_hp_kitti() {
     --fliplr_random --cutout_random --restore $restore
     # --disable_comet
 
-    # CUDA_VISIBLE_DEVICES=3 bash pod/train_mono2.sh local 00007
+    # CUDA_VISIBLE_DEVICES=3 bash pod/train_mono2.sh local 00005
 }
 
 mode=${1:-local} # defaults to local mode of deployment
