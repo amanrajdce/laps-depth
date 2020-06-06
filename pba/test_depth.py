@@ -25,7 +25,7 @@ import matplotlib.cm as cm
 
 
 class ModelTester(ModelTrainer):
-    def __init__(self, hparams, comet_exp=None):
+    def __init__(self, hparams, comet_exp=None, logger=None):
         self.hparams = hparams
         # Loading gt data and files for test set
         self.test_files = self.read_test_files(self.hparams.kitti_raw)
@@ -54,6 +54,9 @@ class ModelTester(ModelTrainer):
         self._session.run([self.meval.init])
 
         return self._session
+
+    def remove_missing_test_files(self):
+        pass
 
     def run_evaluation(self, epoch=0, global_step=0, verbose=True):
         """Evaluate the child model.
@@ -145,7 +148,7 @@ def valid_ckpt_dir(dir_path, dir):
 
 
 def main(args, logger):
-    tester = ModelTester(args)
+    tester = ModelTester(args, logger=logger)
     if os.path.isfile(args.ckpt_path):
         ckpts = [args.ckpt_path]
     else:

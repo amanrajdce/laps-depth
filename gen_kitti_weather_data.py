@@ -4,6 +4,7 @@ Generate KITTI Eigen split data with weather effects such as rain, snow, fog, sp
 python gen_kitti_weather_data.py
 """
 import PIL.Image as pil
+from SSIM_PIL import compare_ssim
 from PIL import ImageEnhance
 import os
 import argparse
@@ -22,7 +23,7 @@ def add_random_rain(img, seed=0):
     img_data = [np.array(img)]
     # generate random slant for rain droplets
     np.random.seed(seed)
-    slant = np.random.randint(-20, 21)
+    slant = np.random.randint(-20, 20)
     img_data = add_rain(img_data, slant=slant)
     img_data = [toPIL(img).convert('RGB') for img in img_data]
 
@@ -32,7 +33,7 @@ def add_random_rain(img, seed=0):
 def add_random_snow(img, seed=0):
     img_data = [np.array(img)]
     np.random.seed(seed)
-    snow_coeff = np.random.uniform(0, 0.51)
+    snow_coeff = np.random.uniform(0, 0.50)
     img_data = add_snow(img_data, snow_coeff=snow_coeff)
     img_data = [toPIL(img).convert('RGB') for img in img_data]
 
@@ -42,8 +43,8 @@ def add_random_snow(img, seed=0):
 def add_random_fog(img, seed=0):
     img_data = [np.array(img)]
     np.random.seed(seed)
-    _coeff = np.random.uniform(0, 0.41)
-    fog_coeff = 0.2 + _coeff
+    _coeff = np.random.uniform(0, 0.30)
+    fog_coeff = 0.10 + _coeff
     img_data = add_fog(img_data, fog_coeff=fog_coeff)
     img_data = [toPIL(img).convert('RGB') for img in img_data]
 
@@ -75,34 +76,47 @@ def read_test_files(dataset_dir, test_file_path):
 def main(args):
     augmentations = [add_random_rain, add_random_snow, add_random_fog, add_speed_blur]
     test_files = read_test_files(args.kitti_raw, args.test_file_path)
+    outlier_dir = os.path.join(args.save_dir, "outliers")
+    if not os.path.exists(outlier_dir):
+        os.makedirs(outlier_dir)
+    num_outlier = 0
+
     # test_files = test_files[:5]
 
     # process files
     for idx, fname in enumerate(test_files):
         print("processing: {}/{}".format(idx+1, len(test_files)))
         fh = open(fname, 'rb')
-        img = pil.open(fh)
+        img = pil.open(fh).convert('RGB')
+        img_aug = copy.copy(img)
         apply_x = copy.copy(augmentations)
         random.shuffle(apply_x)
-        # count = np.random.choice([0, 1, 2], p=[0.10, 0.45, 0.45])
+        #count = np.random.choice([0, 1, 2], p=[0.10, 0.45, 0.45])
         count = np.random.choice([0, 1], p=[0.10, 0.90])
         if count != 0:
             for aug_fun in apply_x:
-                img = aug_fun(img, seed=idx)
+                img_aug = aug_fun(img_aug, seed=idx)
                 count -= 1
                 if count == 0:
                     break
         else:
             pass  # no augmentation applied
 
-        # write augmented sample on disk
-        new_fname = fname.replace(args.kitti_raw, args.save_dir)
-        if not os.path.exists(os.path.dirname(new_fname)):
-            os.makedirs(os.path.dirname(new_fname))
+        ssim_score = compare_ssim(img, img_aug)
+        if ssim_score < 0.40:
+            num_outlier += 1
+            new_fname = "{0:04d}".format(idx)
+            new_fname = os.path.join(outlier_dir, new_fname+".png")
+        else:
+            # write augmented sample on disk
+            new_fname = fname.replace(args.kitti_raw, args.save_dir)
+            if not os.path.exists(os.path.dirname(new_fname)):
+                os.makedirs(os.path.dirname(new_fname))
 
         # print(new_fname)
-        img.save(new_fname)
+        img_aug.save(new_fname)
 
+    print("Number of outlier samples: {}".format(num_outlier))
     return
 
 
