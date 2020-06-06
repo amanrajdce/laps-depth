@@ -3,7 +3,7 @@ kind: Job # Deployment will automatically restart when killed. Use Pod if not ne
 metadata:
   labels:
     k8s-app: research
-  generateName: amraj-train-m2-rps-t3- # replace <your_name> with something that identifies you
+  generateName: amraj-train-one-ops-p5- # replace <your_name> with something that identifies you
   namespace: ecewcsng
 spec:
   template:
@@ -18,18 +18,18 @@ spec:
         imagePullPolicy: Always
         workingDir: /ceph/amanraj/codes/pba-signet
         command: ["/bin/sh"]                     # replace this with your own job execution scripts
-        args: ["pod/train_mono2_rand_policy.sh", "pod", "00002"]
+        args: ["pod/train_mono2.sh", "pod", "00005"]
         resources:
           requests:
-            memory: "16Gi"          # requests 16Gi of memory minimum
+            memory: "15Gi"          # requests 15Gi of memory minimum
             cpu: "3"                # requests 2 CPU extras
             nvidia.com/gpu: 1       # requesting X GPU
-            ephemeral-storage: 75Gi
+            ephemeral-storage: 80Gi
           limits:
-            memory: "32Gi"
+            memory: "40Gi"
             cpu: "4"
             nvidia.com/gpu: 1
-            ephemeral-storage: 75Gi
+            ephemeral-storage: 80Gi
         volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -94,7 +94,7 @@ spec:
                 - 1080Ti
                 #- 2080Ti
       nodeSelector:
-        #kubernetes.io/hostname: clu-fiona2.ucmerced.edu
+        kubernetes.io/hostname: k8s-bharadia-04.sdsc.optiputer.net
         nautilus.io/disktype: nvme
       tolerations:                                      # can use nodes that can't access public internet
         #- key: "nautilus.io/science-dmz"
