@@ -25,11 +25,13 @@ import matplotlib.cm as cm
 
 
 class ModelTester(ModelTrainer):
-    def __init__(self, hparams, comet_exp=None, logger=None):
+    def __init__(self, hparams, comet_exp=None, log=None):
         self.hparams = hparams
+        self.logger = log
         # Loading gt data and files for test set
         self.test_files = self.read_test_files(self.hparams.kitti_raw)
         self.gt_depths = self.setup_evaluation(self.hparams.gt_path)
+        self.remove_missing_test_files()
         self.comet_exp = comet_exp
         self._build_models()
         self._new_session()
@@ -56,7 +58,17 @@ class ModelTester(ModelTrainer):
         return self._session
 
     def remove_missing_test_files(self):
-        pass
+        """Remove test files """
+        test_files = []
+        gt_depths = []
+        for idx, f in enumerate(self.test_files):
+            if os.path.exists(f):
+                test_files.append(f)
+                gt_depths.append(self.gt_depths[idx])
+
+        self.logger.info("Found total test files {}/{}".format(len(test_files), len(self.test_files)))
+        self.test_files = test_files
+        self.gt_depths = gt_depths
 
     def run_evaluation(self, epoch=0, global_step=0, verbose=True):
         """Evaluate the child model.
@@ -147,16 +159,30 @@ def valid_ckpt_dir(dir_path, dir):
         return False
 
 
+def get_ckpt_path(dir_path):
+    files = os.listdir(dir_path)
+    files = [f for f in files if os.path.isfile(os.path.join(dir_path, f))]
+    ckpt_path = None
+    for f in files:
+        if ".data" in f or ".meta" in f or ".index" in f or "checkpoint" in f or ".tune_metadata" in f:
+            pass
+        else:
+            ckpt_path = os.path.join(dir_path, f)
+
+    return ckpt_path
+
+
 def main(args, logger):
-    tester = ModelTester(args, logger=logger)
+    tester = ModelTester(args, log=logger)
     if os.path.isfile(args.ckpt_path):
         ckpts = [args.ckpt_path]
     else:
         ckpts = os.listdir(args.ckpt_path)
         ckpts.sort()
-        # get all checkpoint dirs having checkpoint data files
-        ckpts = [os.path.join(args.ckpt_dir, d) for d in ckpts if valid_ckpt_dir(args.ckpt_dir, d)]
-        ckpts = [os.path.join(ckpt, "model.ckpt-" + ckpt.split("_")[-1]) for ckpt in ckpts]
+        ckpts = [os.path.join(args.ckpt_path, c) for c in ckpts]
+        ckpts = [c for c in ckpts if os.path.isdir(c)]
+        # get all checkpoint files
+        ckpts = [get_ckpt_path(ckpt) for ckpt in ckpts]
 
     # iterate over checkpoints and evaluate model
     for ckpt in ckpts:
@@ -240,7 +266,7 @@ def create_parser():
     parser.add_argument('--scale_normalize', action='store_true', help='spatially normalize depth prediction')
     parser.add_argument('--save_pred', action='store_true', help='save predictions on disk')
     parser.add_argument('--num_source', type=int, default=2, help='number of source images')
-    parser.add_argument('--name', type=str, default='kitti_evaluation')
+    parser.add_argument('--name', type=str, default='kitti_evaluation_weather')
 
     args = parser.parse_args()
     return args

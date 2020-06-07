@@ -15,8 +15,8 @@ train_hp_kitti() {
   gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
   name="train_hp_random_single_policy"
-  rand_policy="0,4,5,2,10,2,9,5,7,1,0,4,1,9,8,1,8,3,8,1,2,0,1,0,10,6,5,1,6,0,9,6,4,0,9,4,10,7,6,5,2,9,5,5,4,5,1,9,9,6,4,4,6,4,10,3,7,1,9,2,10,0,8,6,3,9,10,9,5,2,9,6,2,0,5,9"
-  restore="$local_dir/train_hp_random_single_policy/RayModel_0_2020-06-01_05-10-14kl00cdep/checkpoint_16/model.ckpt-16"
+  rand_policy="7,6,4,7,7,6,8,9,8,3,0,4,6,3,1,5,6,8,5,7,4,7,6,1,7,7,9,3,10,7,6,6,5,4,6,7,5,8,10,0,4,2,5,7,5,7,6,3,2,5,1,9,0,7,0,7,5,7,3,6,2,3,7,9,10,5,0,7,8,4,2,1,6,2,2,8"
+  restore="$local_dir/train_hp_random_single_policy/RayModel_0_2020-06-01_16-20-5853jeb7oo/checkpoint_17/model.ckpt-17"
 
   python pba/train.py \
     --local_dir "$local_dir" \

@@ -3,7 +3,7 @@ kind: Job # Deployment will automatically restart when killed. Use Pod if not ne
 metadata:
   labels:
     k8s-app: research
-  generateName: amraj-train-m2-rsp-t4run2- # replace <your_name> with something that identifies you
+  generateName: amraj-train-m2-rsp-t1run2- # replace <your_name> with something that identifies you
   namespace: ecewcsng
 spec:
   template:
@@ -26,7 +26,7 @@ spec:
             nvidia.com/gpu: 1       # requesting X GPU
             ephemeral-storage: 80Gi
           limits:
-            memory: "35Gi"
+            memory: "40Gi"
             cpu: "5"
             nvidia.com/gpu: 1
             ephemeral-storage: 80Gi
