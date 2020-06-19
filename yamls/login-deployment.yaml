@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment # Deployment will automatically restart when killed. Use Pod if not needed
+metadata:
+ name: amanraj-login     # replace <your_name> with something that identifies you
+#  namespace: ecewcsng
+ labels:
+  k8s-app: research
+spec:
+ replicas: 1
+ selector:
+   matchLabels:
+     k8s-app: research
+ template:
+   metadata:
+     labels:
+       k8s-app: research
+   spec:
+     containers:
+     - name: log-in
+       image: gitlab-registry.nautilus.optiputer.net/bcheng/research-containers/login
+       imagePullPolicy: "IfNotPresent"
+       workingDir: /ceph/amanraj/
+       args: ['sleep', 'infinity']
+       resources:
+         requests:
+           memory: "100Mi"
+           cpu: "100m"
+         limits:
+           memory: "100Mi"
+           cpu: "100m"
+           nvidia.com/gpu: 0 # requesting X GPU
+       volumeMounts:
+       - mountPath: /dev/shm
+         name: dshm
+       - mountPath: /ceph
+         name: ceph
+     volumes:
+     - name: dshm
+       emptyDir:
+         medium: Memory
+     - name: ceph
+       flexVolume:
+         driver: ceph.rook.io/rook
+         fsType: ceph
+         options:
+           clusterNamespace: rook
+           fsName: nautilusfs
+           path: /ecewcsng
+           mountUser: ecewcsng
+           mountSecret: ceph-fs-secret

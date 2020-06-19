@@ -13,7 +13,7 @@ class Model(object):
         self.hparams = hparams
         self.input_height = hparams.input_height
         self.input_width = hparams.input_width
-        assert mode in ['train', 'eval']
+        assert mode in ['train', 'eval', 'test']
         self.is_training = True if mode == "train" else False
         self.mode = mode
 
@@ -27,8 +27,8 @@ class Model(object):
     def _setup_misc(self, mode):
         """Sets up miscellaneous in the model constructor."""
         self.lr_rate_ph = tf.Variable(0.0, name='lrn_rate', trainable=False)
-        self.reuse = None if (mode == 'train') else True
-        self.batch_size = self.hparams.batch_size
+        if mode == "train":
+            self.batch_size = self.hparams.batch_size
         self.test_batch_size = self.hparams.test_batch_size
 
     def _setup_images_and_intrinsic(self, mode):
@@ -43,16 +43,8 @@ class Model(object):
                 tf.float32, [self.batch_size, self.input_height, self.input_width, 3 * ns]  # assuming two source images
             )
             self.intrinsic_input = tf.placeholder(tf.float32, [self.batch_size, 3, 3])
-
-            # variables used to fed augmented data to network
-            self.tgt_image_input_aug = tf.placeholder(
-                tf.float32, [self.batch_size, self.input_height, self.input_width, 3]
-            )
-            self.src_image_stack_input_aug = tf.placeholder(
-                tf.float32, [self.batch_size, self.input_height, self.input_width, 3 * ns]  # assuming two source images
-            )
         else:
-            self.tgt_image_input_aug = tf.placeholder(
+            self.tgt_image_input = tf.placeholder(
                 tf.float32, [None, self.input_height, self.input_width, 3]
             )
 
@@ -68,7 +60,6 @@ class Model(object):
         # Build train/eval model
         self.build_model()
         self._calc_num_trainable_params()
-        #sys.exit(-1)
 
         if self.is_training:
             self._build_train_op()
@@ -76,7 +67,7 @@ class Model(object):
         # Setup checkpointing for this child model
         # Keep 2 or more checkpoints around during training.
         with tf.device('/cpu:0'):
-            self.saver = tf.train.Saver(max_to_keep=10)
+            self.saver = tf.train.Saver(max_to_keep=100)
 
         self.init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
@@ -123,16 +114,19 @@ class Model(object):
             random_brightness = tf.random_uniform([], 0.5, 2.0)
             im_aug = im_aug * random_brightness
 
+            # TODO: apply same color shift for all frames
             # randomly shift color
+            in_c = 3
             random_colors = tf.random_uniform([in_c], 0.8, 1.2)
             white = tf.ones([batch_size, in_h, in_w])
             color_image = tf.stack([white * random_colors[i] for i in range(in_c)], axis=3)
+
+            color_image = tf.concat([color_image, color_image, color_image], axis=3)
             im_aug *= color_image
 
             # saturate
             im_aug = tf.clip_by_value(im_aug, 0, 1)
-
-            im_aug = tf.image.convert_image_dtype(im_aug, tf.uint8)
+            im_aug = tf.image.convert_image_dtype(im_aug, tf.float32)
 
             return im_aug
 
@@ -145,30 +139,35 @@ class Model(object):
 
     def build_model(self):
         opt = self.hparams
-        self.tgt_image_aug = self.preprocess_image(self.tgt_image_input_aug)  # will be fed to network
 
         if self.mode == "train":
             tf.logging.info("Building train model")
-            self.tgt_image = self.preprocess_image(self.tgt_image_input)  # will be used for loss computation only
-            self.tgt_image_pyramid = self.scale_pyramid(self.tgt_image, opt.num_scales)
+            image_all = tf.concat([self.tgt_image_input, self.src_image_stack_input], axis=3)
+            # kitti augmentation is enabled
+            if opt.use_kitti_aug:
+                image_all, self.intrinsic_input = self.signet_data_augmentation(
+                    image_all, self.intrinsic_input, opt.input_height, opt.input_width
+                )
+            # image_channels=3*opt.num_source
+            self.tgt_image = self.preprocess_image(image_all[:, :, :, :3])
+            self.src_image_stack = self.preprocess_image(image_all[:, :, :, 3:])
+
+            self.tgt_image_pyramid = self.scale_pyramid(self.tgt_image, opt.num_scales, opt.monodepth2)
             self.tgt_image_tile_pyramid = [tf.tile(img, [opt.num_source, 1, 1, 1]) for img in self.tgt_image_pyramid]
 
-            # building model in train mode
-            self.src_image_stack_aug = self.preprocess_image(self.src_image_stack_input_aug)  # will be fed to network
-
-            self.src_image_stack = self.preprocess_image(self.src_image_stack_input)
             self.src_image_concat = tf.concat(
                 [self.src_image_stack[:, :, :, 3 * i:3 * (i + 1)] for i in range(opt.num_source)], axis=0
             )
-            self.src_image_concat_pyramid = self.scale_pyramid(self.src_image_concat, opt.num_scales)
+            self.src_image_concat_pyramid = self.scale_pyramid(self.src_image_concat, opt.num_scales, opt.monodepth2)
             self.intrinsics = self.get_multi_scale_intrinsics(
-                self.intrinsic_input, self.hparams.num_scales
+                self.intrinsic_input, self.hparams.num_scales, opt.monodepth2
             )
             self.pred_depth = self.build_dispnet()
-            self.pred_poses  = self.build_posenet()
+            self.pred_poses = self.build_posenet()
             self.build_rigid_flow_warping()
             self.build_losses()
         else:
+            self.tgt_image = self.preprocess_image(self.tgt_image_input)
             # building model in eval mode
             tf.logging.info("Building eval model")
             self.pred_depth = self.build_dispnet()
@@ -187,10 +186,16 @@ class Model(object):
         grads = tf.gradients(self.total_loss, tvars)
         if hparams.gradient_clipping_by_global_norm > 0.0:
             grads, norm = tf.clip_by_global_norm(grads, hparams.gradient_clipping_by_global_norm)
-            tf.summary.scalar('grad_norm', norm)
+            # tf.summary.scalar('grad_norm', norm)
 
         # Setup the initial learning rate
-        self.optimizer = tf.train.AdamOptimizer(self.lr_rate_ph, 0.9)
+        if self.hparams.optimizer == "sgd":
+            tf.logging.info("Using SGD optimizer! Set lr_decay=cosine for best results!")
+            self.optimizer = tf.train.MomentumOptimizer(self.lr_rate_ph, 0.9, use_nesterov=True)
+        else:
+            tf.logging.info("Defaulting to Adam optimizer")
+            self.optimizer = tf.train.AdamOptimizer(self.lr_rate_ph, 0.9)
+
         apply_op = self.optimizer.apply_gradients(zip(grads, tvars), global_step=self.global_step, name='train_step')
         train_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
@@ -215,14 +220,15 @@ class Model(object):
 
         return intrinsics
 
-    def get_multi_scale_intrinsics(self, intrinsics, num_scales):
+    def get_multi_scale_intrinsics(self, intrinsics, num_scales, set_orig_scale=False):
         intrinsics_mscale = []
         # Scale the intrinsics accordingly for each scale
         for s in range(num_scales):
-            fx = intrinsics[:, 0, 0] / (2 ** s)
-            fy = intrinsics[:, 1, 1] / (2 ** s)
-            cx = intrinsics[:, 0, 2] / (2 ** s)
-            cy = intrinsics[:, 1, 2] / (2 ** s)
+            scale = 0 if set_orig_scale else s
+            fx = intrinsics[:, 0, 0] / (2 ** scale)
+            fy = intrinsics[:, 1, 1] / (2 ** scale)
+            cx = intrinsics[:, 0, 2] / (2 ** scale)
+            cy = intrinsics[:, 1, 2] / (2 ** scale)
             intrinsics_mscale.append(self.make_intrinsics_matrix(fx, fy, cx, cy))
 
         intrinsics_mscale = tf.stack(intrinsics_mscale, axis=1)
@@ -243,18 +249,23 @@ class Model(object):
         opt = self.hparams
 
         # build dispnet_inputs
-        if self.mode == 'eval':
-            # for test_depth mode we only predict the depth of the target image
-            self.dispnet_inputs = self.tgt_image_aug
-        else:
+        if self.mode == "train":
             # multiple depth predictions; tgt: disp[:bs,:,:,:] src.i: disp[bs*(i+1):bs*(i+2),:,:,:]
-            self.dispnet_inputs = self.tgt_image_aug
+            self.dispnet_inputs = self.tgt_image
             for i in range(opt.num_source):
                 self.dispnet_inputs = tf.concat(
-                    [self.dispnet_inputs, self.src_image_stack_aug[:, :, :, 3 * i:3 * (i + 1)]], axis=0
+                    [self.dispnet_inputs, self.src_image_stack[:, :, :, 3 * i:3 * (i + 1)]], axis=0
                 )
+        else:
+            # for eval/test depth mode we only predict the depth of the target image
+            self.dispnet_inputs = self.tgt_image
 
         self.pred_disp = disp_net(opt, self.dispnet_inputs, self.is_training)
+
+        # TODO upsample disparity for monodepth2
+        if self.mode == "train" and opt.monodepth2:
+            self.pred_disp = [self.upsample_disp(disp) for disp in self.pred_disp]
+
         if opt.scale_normalize:
             # As proposed in https://arxiv.org/abs/1712.00175, this can
             # bring improvement in depth estimation, but not included in our paper.
@@ -268,10 +279,23 @@ class Model(object):
 
         return pred_depth
 
+    def upsample_disp(self, pred_disp):
+        """
+        Upsample disparity from dispnet to network
+        input resolution (Bilinear interpolation)
+        :param pred_disp: predicted disparity map from dispnet
+        :return: upsampled disparity map
+        """
+        _, height, width, _ = pred_disp.get_shape().as_list()
+        if height == self.input_height and width == self.input_width:
+            return pred_disp
+        else:
+            return tf.image.resize_images(pred_disp, [self.input_height, self.input_width])
+
     def build_posenet(self):
         opt = self.hparams
         # build posenet_inputs
-        self.posenet_inputs = tf.concat([self.tgt_image_aug, self.src_image_stack_aug], axis=3)
+        self.posenet_inputs = tf.concat([self.tgt_image, self.src_image_stack], axis=3)
         pred_poses = pose_net(opt, self.posenet_inputs, self.is_training)
         return pred_poses
 
@@ -323,14 +347,46 @@ class Model(object):
         """
 
         # compute reconstruction errors based on the rigid flow
-        self.fwd_rigid_error_pyramid = [
+        fwd_rigid_error_pyramid = [
             self.image_similarity(self.fwd_rigid_warp_pyramid[s], self.tgt_image_tile_pyramid[s]) for s in
-            range(opt.num_scales)
+            range(opt.num_scales)       # [(B*num_source, height, width, 3) * num_scales]
         ]
-        self.bwd_rigid_error_pyramid = [
+        bwd_rigid_error_pyramid = [
             self.image_similarity(self.bwd_rigid_warp_pyramid[s], self.src_image_concat_pyramid[s]) for s in
-            range(opt.num_scales)
+            range(opt.num_scales)      # [(B*num_source, height, width, 3) * num_scales]
         ]
+
+        # TODO add minimum reprojection error from monodepth2
+        if opt.monodepth2:
+            tf.logging.info("Using monodepth2 adaptations for error masking")
+            # compute minimum reprojection error as per monodepth2 work
+            self.fwd_rigid_error_pyramid = [
+                self.compute_min_reproj_error(fwd_rigid_error_pyramid[s]) for s in range(opt.num_scales)
+            ]
+            self.bwd_rigid_error_pyramid = [
+                self.compute_min_reproj_error(bwd_rigid_error_pyramid[s]) for s in range(opt.num_scales)
+            ]
+            # apply auto-masking to remove static pixels
+            tgt_src_error_multiscale = [
+                self.image_similarity(self.tgt_image_tile_pyramid[s], self.src_image_concat_pyramid[s]) for s in
+                range(opt.num_scales)  # [(B*num_source, height, width, 3) * num_scales]
+            ]
+            self.tgt_src_error_pyramid = [
+                self.compute_min_reproj_error(tgt_src_error_multiscale[s]) for s in range(opt.num_scales)
+            ]
+            # create automasking binary mask used in losses
+            self.fwd_rigid_error_automask = [
+                self.compute_min_automask(self.fwd_rigid_error_pyramid[s], self.tgt_src_error_pyramid[s]) for s in
+                range(opt.num_scales)
+            ]
+            self.bwd_rigid_error_automask = [
+                self.compute_min_automask(self.bwd_rigid_error_pyramid[s], self.tgt_src_error_pyramid[s]) for s in
+                range(opt.num_scales)
+            ]
+        else:
+            self.fwd_rigid_error_pyramid = fwd_rigid_error_pyramid
+            self.bwd_rigid_error_pyramid = bwd_rigid_error_pyramid
+
 
         # TODO Record fwd rigid flow warp error on tensorboard
         self.fwd_rigid_error_scale = []
@@ -345,6 +401,35 @@ class Model(object):
             # tf.summary.image("bwd_rigid_error_scale" + str(i), tmp_bwd_rigid_error_scale, max_outputs=opt.max_outputs)
             self.bwd_rigid_error_scale.append(tmp_bwd_rigid_error_scale)
 
+    def compute_min_reproj_error(self, rigid_flow_warp_error):
+        """
+        Computer pixelwise minimum reprojection error min(tgt->src1, tgt->src2)
+        :param rigid_flow_warp_error: shape (B*num_source, height, width, 3)
+        :return: return (B, height, width, 3)
+        """
+        batch = rigid_flow_warp_error.get_shape().as_list()[0]
+        assert self.hparams.num_source == 2, "Doesn't support num_source > 2"
+        batch_size = batch // self.hparams.num_source
+        src1_flow_warp_error = rigid_flow_warp_error[:batch_size]
+        src2_flow_warp_error = rigid_flow_warp_error[batch_size:]
+
+        return tf.math.minimum(src1_flow_warp_error, src2_flow_warp_error)
+
+    def compute_min_automask(self, input_tensor1, input_tensor2):
+        """
+        Return binary mask with values where input_tensor1 < input_tensor2
+        :param input_tensor1:
+        :param input_tensor2:
+        :return:
+        """
+        mask = tf.less(input_tensor1, input_tensor2)
+        mask = tf.cast(mask, dtype='float32')
+        return mask
+
+    def reduce_mask_mean(self, input_tensor, mask):
+        assert input_tensor.get_shape().as_list() == mask.get_shape().as_list()
+        return tf.reduce_sum(input_tensor * mask) / tf.reduce_sum(mask)
+
     def build_losses(self):
         opt = self.hparams
         rigid_warp_loss = 0.0
@@ -353,7 +438,13 @@ class Model(object):
         for s in range(opt.num_scales):
             # rigid_warp_loss
             if opt.rigid_warp_weight > 0:
-                rigid_warp_loss += opt.rigid_warp_weight * opt.num_source / 2 * \
+                if opt.monodepth2:
+                    # apply automasking as per monodepth2 work
+                    rigid_warp_loss += opt.rigid_warp_weight * opt.num_source / 2 * \
+                                       (self.reduce_mask_mean(self.fwd_rigid_error_pyramid[s], self.fwd_rigid_error_automask[s]) +
+                                        self.reduce_mask_mean(self.bwd_rigid_error_pyramid[s], self.bwd_rigid_error_automask[s]))
+                else:
+                    rigid_warp_loss += opt.rigid_warp_weight * opt.num_source / 2 * \
                                    (tf.reduce_mean(self.fwd_rigid_error_pyramid[s]) +
                                     tf.reduce_mean(self.bwd_rigid_error_pyramid[s]))
             # disp_smooth_loss
@@ -406,14 +497,14 @@ class Model(object):
         disp_mean = tf.tile(disp_mean, [1, curr_h, curr_w, curr_c])
         return disp / disp_mean
 
-    def scale_pyramid(self, img, num_scales):
+    def scale_pyramid(self, img, num_scales, set_orig_scale=False):
         if img == None:
             return None
         else:
             scaled_imgs = [img]
             _, h, w, _ = img.get_shape().as_list()
             for i in range(num_scales - 1):
-                ratio = 2 ** (i + 1)
+                ratio = 1 if set_orig_scale else 2 ** (i + 1)
                 nh = int(h / ratio)
                 nw = int(w / ratio)
                 scaled_imgs.append(tf.image.resize_area(img, [nh, nw]))

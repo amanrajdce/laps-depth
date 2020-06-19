@@ -7,6 +7,8 @@ from __future__ import print_function
 import random
 import numpy as np
 import ray
+import shutil
+import os
 from ray.tune import run_experiments
 from ray.tune.schedulers import PopulationBasedTraining
 import tensorflow as tf
@@ -71,14 +73,31 @@ def main(_):
         config["hp_policy"] = new_params
         return config
 
-    ray.init()
+    ray.init(
+        webui_host='127.0.0.1',
+        # memory=1024 * 1024 * 1024 * 20,    # setting 20 GB for ray workers
+        # object_store_memory=1024 * 1024 * 1024 * 30,
+        # lru_evict=True
+    )
+
+    # copy code to local_dir
+    code_dir = os.path.join(os.path.abspath(os.getcwd()), 'pba')
+    dst_dir = os.path.join(FLAGS.local_dir, FLAGS.name, 'pba')
+    if os.path.exists(dst_dir):
+        shutil.rmtree(dst_dir)  # remove old copy of code
+
+    shutil.copytree(code_dir, dst_dir)
 
     pbt = PopulationBasedTraining(
         time_attr="training_iteration",
-        reward_attr="abs_rel",
+        reward_attr='abs_rel_acc',
+        # metric="abs_rel",
+        # mode="min",
         perturbation_interval=FLAGS.perturbation_interval,
         custom_explore_fn=explore,
-        log_config=True)
+        quantile_fraction=0.50,
+        log_config=True
+    )
 
     run_experiments(
         {
@@ -87,6 +106,8 @@ def main(_):
         scheduler=pbt,
         reuse_actors=True,
         verbose=True)
+
+    ray.shutdown()
 
 
 if __name__ == "__main__":

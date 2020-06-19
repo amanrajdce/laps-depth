@@ -18,18 +18,20 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import copy
+import sys
 try:
     import cPickle as pickle
 except:
     import pickle
 import os
 import random
+import copy
+import cv2
 import numpy as np
 import tensorflow as tf
-import cv2
-import torch
-import torch.utils.data as data
+import PIL.Image as pil
+import gc
+import ray
 
 import pba.policies as found_policies
 from pba.utils import parse_log_schedule
@@ -37,26 +39,9 @@ import pba.augmentation_transforms_hp as augmentation_transforms_pba
 import pba.augmentation_transforms as augmentation_transforms_autoaug
 
 
-class PairedData(object):
-    def __init__(self, data_loader):
-        self.data_loader = data_loader
-        self.data_loader_iter = iter(self.data_loader)
-        self.iter = 0
-
-    def __iter__(self):
-        self.data_loader_iter = iter(self.data_loader)
-        self.iter = 0
-        return self
-
-    def __next__(self):
-        self.iter += 1
-        tgt_img, src_img_1, src_img_2, intrinsic = next(self.data_loader_iter)
-        return tgt_img, src_img_1, src_img_2, intrinsic
-
-
-class ImageFolderKITTI(data.Dataset):
+class ImageFolderKITTI(object):
     def __init__(
-        self, data_root, train_file_path, input_height, input_width,
+        self, data_root, train_file_path, input_height, input_width, load_all=False
     ):
         """
         :param data_root: dataset root
@@ -73,6 +58,9 @@ class ImageFolderKITTI(data.Dataset):
         self.image_list = self.data['image_file_list']
         self.cam_list = self.data['cam_file_list']
         assert len(self.image_list) == len(self.cam_list)
+        self.load_all = load_all
+        if self.load_all:
+            self.image_list, self.cam_list = self.load_all_at_once()
 
     def read_image_data_for_input(self, img_path):
         """
@@ -80,12 +68,23 @@ class ImageFolderKITTI(data.Dataset):
         :param img_path: path of image sequence
         :return: tgt_img, src_img_1, srcm_2
         """
-        # read image, convert to RGB
-        image_seq = cv2.imread(img_path)
-        image_seq = cv2.cvtColor(image_seq, cv2.COLOR_BGR2RGB)
-        src_img_1 = image_seq[:, :self.input_width, :]
-        tgt_img = image_seq[:, self.input_width:2*self.input_width, :]
-        src_img_2 = image_seq[:, 2*self.input_width:, :]
+        # read image
+        fh = open(img_path, 'rb')
+        image_seq = np.array(pil.open(fh), dtype='float32')
+
+        # get height and width of frame, total 3 frames in sequence
+        height, width, _ = image_seq.shape
+        width = width // 3
+
+        src_img_1 = image_seq[:, :width, :]
+        tgt_img = image_seq[:, width:2*width, :]
+        src_img_2 = image_seq[:, 2*width:, :]
+
+        if self.input_width != width or self.input_height != height:
+            # resize to input height and width
+            src_img_1 = cv2.resize(src_img_1, (self.input_width, self.input_height), interpolation=cv2.INTER_LINEAR)
+            tgt_img = cv2.resize(tgt_img, (self.input_width, self.input_height), interpolation=cv2.INTER_LINEAR)
+            src_img_2 = cv2.resize(src_img_2, (self.input_width, self.input_height), interpolation=cv2.INTER_LINEAR)
 
         # Normalize
         tgt_img = tgt_img.astype('float32') / 255.0
@@ -128,11 +127,27 @@ class ImageFolderKITTI(data.Dataset):
 
         return intrinsic
 
+    def load_all_at_once(self):
+        image_list = []
+        cam_list = []
+        for index in range(0, len(self.image_list)):
+            img_path = self.image_list[index]
+            tgt_img, src_img_1, src_img_2 = self.read_image_data_for_input(img_path)
+            image_list.append((tgt_img, src_img_1, src_img_2))
+            cam_path = self.cam_list[index]
+            cam_list.append(self.read_cam_data(cam_path))
+
+        return image_list, cam_list
+
     def __getitem__(self, index):
-        img_path = self.image_list[index]
-        cam_path = self.cam_list[index]
-        tgt_img, src_img_1, src_img_2 = self.read_image_data_for_input(img_path)
-        intrinsic = self.read_cam_data(cam_path)
+        if self.load_all:
+            tgt_img, src_img_1, src_img_2 = self.image_list[index]
+            intrinsic = self.cam_list[index]
+        else:
+            img_path = self.image_list[index]
+            cam_path = self.cam_list[index]
+            tgt_img, src_img_1, src_img_2 = self.read_image_data_for_input(img_path)
+            intrinsic = self.read_cam_data(cam_path)
 
         return tgt_img, src_img_1, src_img_2, intrinsic
 
@@ -154,30 +169,28 @@ def parse_policy(policy_emb, augmentation_transforms):
 class TrainDataSet(object):
     """Dataset object that produces augmented training data"""
 
-    def __init__(self, hparams, shuffle=False):
+    def __init__(self, hparams, style_augmentor=None, comet_exp=None):
         """
         :param hparams: tf.hparams object
         """
         self.hparams = hparams
-        self.epochs = 0
-        seed = 8964
-        random.seed(seed)
         self.input_height = hparams.input_height
         self.input_width = hparams.input_width
+        self.style_augmentor = ray.put(style_augmentor)
+        self.comet_exp = comet_exp
 
         # parsing initial policy for data augmentation
+        self.good_policies = None
+        self.augmentation_transforms = None
+        self.policy = None
         self.parse_policy(hparams)
-        dataset = ImageFolderKITTI(
+
+        self.data_loader = ImageFolderKITTI(
             self.hparams.kitti_root, self.hparams.train_file_path,
-            self.hparams.input_height, self.hparams.input_width
+            self.hparams.input_height, self.hparams.input_width, self.hparams.load_all
         )
-        data_loader = torch.utils.data.DataLoader(
-            dataset, batch_size=self.hparams.batch_size, shuffle=shuffle,
-            num_workers=self.hparams.num_workers, drop_last=True
-        )
-        self.train_size = len(dataset)
-        self.paired_data = PairedData(data_loader)
-        tf.logging.info('Train dataset size: {}'.format(len(dataset)))
+        self.train_size = len(self.data_loader)
+        tf.logging.info('Train dataset size: {}'.format(self.train_size))
 
     def parse_policy(self, hparams):
         """Parses policy schedule from input, which can be a list, list of lists, text file, or pickled list.
@@ -214,15 +227,6 @@ class TrainDataSet(object):
                     epochs=hparams.hp_policy_epochs,
                     multiplier=float(hparams.num_epochs) / hparams.hp_policy_epochs
                 )
-            elif isinstance(hparams.hp_policy, str) and hparams.hp_policy.endswith('.p'):
-                assert hparams.num_epochs % hparams.hp_policy_epochs == 0
-                tf.logging.info('custom .p file, policy number: {}'.format(hparams.schedule_num))
-                with open(hparams.hp_policy, 'rb') as f:
-                    policy = pickle.load(f)[hparams.schedule_num]
-                raw_policy = []
-                for num_iters, pol in policy:
-                    for _ in range(num_iters * hparams.num_epochs // hparams.hp_policy_epochs):
-                        raw_policy.append(pol)
             else:
                 raw_policy = hparams.hp_policy
 
@@ -234,11 +238,15 @@ class TrainDataSet(object):
                     cur_pol.extend(parse_policy(pol[split:], self.augmentation_transforms))
                     self.policy.append(cur_pol)
                 tf.logging.info('using HP policy schedule, last: {}'.format(self.policy[-1]))
+                if self.comet_exp is not None:
+                    self.comet_exp.log_parameter('hp_policy_schedule_last', self.policy[-1])
             elif isinstance(raw_policy, list):
                 split = len(raw_policy) // 2
                 self.policy = parse_policy(raw_policy[:split], self.augmentation_transforms)
                 self.policy.extend(parse_policy(raw_policy[split:], self.augmentation_transforms))
                 tf.logging.info('using HP Policy, policy: {}'.format(self.policy))
+                if self.comet_exp is not None:
+                    self.comet_exp.log_parameter('hp_policy', self.policy)
         else:
             # use autoaugment policies modified for KITTI
             self.augmentation_transforms = augmentation_transforms_autoaug
@@ -255,92 +263,140 @@ class TrainDataSet(object):
         tf.logging.info('reset aug policy')
         return
 
-    def augment_batch(self, tgt_img_batch, src_img_1_batch, src_img_2_batch, intrinsic_batch, iteration=None):
+    def next_batch(self, indexes, iteration):
         """
-        Apply augmentation on given batch of data
-        :param tgt_img_batch:  target image batch
-        :param src_img_1_batch: srch_image1 batch
-        :param src_img_2_batch: src_image2 batch
-        :param intrinsic_batch: intrinsic matrix batch
-        :param iteration: current iteration number
-        :return: augmented batch
+        Ray parallelized implementation of next batch function
+        :param indexes: indexes of batch to read
+        :param iteration: current epoch of training
+        :return: original batch data as well as augmented
         """
-        # convert pytorch tensors back to numpy
-        tgt_img_batch = tgt_img_batch.numpy()
-        src_img_1_batch = src_img_1_batch.numpy()
-        src_img_2_batch = src_img_2_batch.numpy()
-        intrinsic_batch = intrinsic_batch.numpy()
+        batch_size = len(indexes)
+        batch = [augment_sample.remote(
+            idx,
+            iteration,
+            self.data_loader,
+            self.hparams.no_aug_policy,
+            self.hparams.use_hp_policy,
+            self.good_policies,
+            self.policy,
+            self.augmentation_transforms,
+            self.style_augmentor,
+            self.input_height,
+            self.input_width,
+            self.hparams.flatten) for idx in indexes
+        ]
+        res = ray.get(batch)
 
-        tgt_img_batch_aug = []
-        src_img_1_batch_aug = []
-        src_img_2_batch_aug = []
-        intrinsic_batch_aug = []
+        assert len(res) == batch_size
+        tgt_img, tgt_img_aug = [], []
+        src_img_stack, src_img_stack_aug = [], []
+        intrinsic = []
 
-        assert len(tgt_img_batch) == len(src_img_1_batch) == len(src_img_2_batch) == len(intrinsic_batch)
-        curr_batch_size = len(tgt_img_batch)
+        for idx in range(0, batch_size):
+            tgt_, src_img_stack_, tgt_aug_, src_img_stack_aug_, intrinsic_ = res[idx]
+            tgt_img.append(tgt_)
+            src_img_stack.append(src_img_stack_)
+            # augmented data
+            tgt_img_aug.append(tgt_aug_)
+            src_img_stack_aug.append(src_img_stack_aug_)
+            intrinsic.append(intrinsic_)
 
-        for idx in range(0, curr_batch_size):
-            tgt_img = tgt_img_batch[idx]
-            src_img_1 = src_img_1_batch[idx]
-            src_img_2 = src_img_2_batch[idx]
-            intrinsic = intrinsic_batch[idx]
-            if not self.hparams.no_aug_policy:
-                if not self.hparams.use_hp_policy:
-                    # apply autoaugment policy here modified for KITTI
-                    epoch_policy = self.good_policies[np.random.choice(len(self.good_policies))]
-                    tgt_img, src_img_1, src_img_2, intrinsic = self.augmentation_transforms.apply_policy(
-                        policy=epoch_policy, data=[tgt_img, src_img_1, src_img_2, intrinsic],
-                        image_size=(self.input_height, self.input_width)
-                    )
-                else:
-                    # apply PBA policy modified for KITTI
-                    if isinstance(self.policy[0], list):
-                        # single policy
-                        if self.hparams.flatten:
-                            tgt_img, src_img_1, src_img_2, intrinsic = self.augmentation_transforms.apply_policy(
-                                policy=self.policy[random.randint(0, len(self.policy) - 1)],
-                                data=[tgt_img, src_img_1, src_img_2, intrinsic],
-                                image_size=(self.input_height, self.input_width)
-                            )
-                        else:
-                            tgt_img, src_img_1, src_img_2, intrinsic = self.augmentation_transforms.apply_policy(
-                                policy=self.policy[iteration],
-                                data=[tgt_img, src_img_1, src_img_2, intrinsic],
-                                image_size=(self.input_height, self.input_width)
-                            )
-                    elif isinstance(self.policy, list):
-                        # policy schedule
-                        tgt_img, src_img_1, src_img_2, intrinsic = self.augmentation_transforms.apply_policy(
-                            policy=self.policy, data=[tgt_img, src_img_1, src_img_2, intrinsic],
-                            image_size=(self.input_height, self.input_width)
-                        )
-                    else:
-                        raise ValueError('Unknown policy.')
-            else:
-                # no data augmentation policy
-                pass
+        tgt_img = np.array(tgt_img, np.float32)
+        src_img_stack = np.array(src_img_stack, np.float32)
 
-            if self.hparams.use_kitti_aug:
-                # TODO implement augmentations from SIGNet
-                # random_scaling, random_cropping,  random_coloring
-                raise NotImplementedError()
+        tgt_img_aug = np.array(tgt_img_aug, np.float32)
+        src_img_stack_aug = np.array(src_img_stack_aug, np.float32)
+        intrinsic = np.array(intrinsic, np.float32)
 
-            tgt_img_batch_aug.append(tgt_img)
-            src_img_1_batch_aug.append(src_img_1)
-            src_img_2_batch_aug.append(src_img_2)
-            intrinsic_batch_aug.append(intrinsic)
+        # delete reference to object store to free memory
+        while len(batch) > 0:
+            del batch[-1]
+            del res[-1]
 
-        tgt_img_batch = np.array(tgt_img_batch_aug, np.float32)
-        src_img_1_batch = np.array(src_img_1_batch_aug, np.float32)
-        src_img_2_batch = np.array(src_img_2_batch_aug, np.float32)
-        intrinsic_batch = np.array(intrinsic_batch, np.float32)
+        assert len(res) == len(batch) == 0
+        del res
+        del batch
 
-        # convert source image into (B, H, W, 3*2)
-        src_img_stack_batch = np.concatenate((src_img_1_batch, src_img_2_batch), axis=-1)
-
-        return tgt_img_batch, src_img_stack_batch, intrinsic_batch
+        return tgt_img, src_img_stack, tgt_img_aug, src_img_stack_aug, intrinsic
 
     def load_data(self):
-        return self.paired_data
+        return self.data_loader
+
+
+# @ray.remote(num_gpus=0.10, max_calls=8)
+@ray.remote
+def augment_sample(
+        sample_idx, iteration, data_loader, no_aug_policy, use_hp_policy, good_policies,
+        policy, augmentation_transforms, style_augmentor, input_height, input_width, flatten,
+):
+    """
+    :param sample_idx: index of sample to be read
+    :param iteration: current epoch of model (1 based)
+    :param data_loader: dataloader implementing __getitem__
+    :param no_aug_policy: whether to use any policy or not
+    :param use_hp_policy: whether to use hp policy or not
+    :param good_policies: autoaugment policy
+    :param policy: parsed policy
+    :param augmentation_transforms: augmentation function
+    :param style_augmentor: function that augments data with randomized style
+    :param input_height: height of input image
+    :param input_width: width of input image
+    :param flatten: randomly select an aug policy from schedule
+    :return: return original and augmented sample
+    """
+    # read sample from disk
+    tgt_img, src_img_1, src_img_2, intrinsic = data_loader[sample_idx]
+    input_data = {'img_data': [tgt_img, src_img_1, src_img_2], 'intrinsic': intrinsic}
+
+    if not no_aug_policy:
+        if not use_hp_policy:
+            # apply autoaugment policy here modified for KITTI
+            epoch_policy = good_policies[np.random.choice(len(good_policies))]
+            output_data = augmentation_transforms.apply_policy(
+                policy=epoch_policy,
+                data=copy.copy(input_data),
+                image_size=(input_height, input_width),
+                style_augmentor=style_augmentor
+            )
+        else:
+            # apply learned policy for kitti
+            if isinstance(policy[0], list):
+                # single policy
+                if flatten:
+                    output_data = augmentation_transforms.apply_policy(
+                        policy=policy[random.randint(0, len(policy) - 1)],
+                        data=copy.copy(input_data),
+                        image_size=(input_height, input_width),
+                        style_augmentor=style_augmentor
+                    )
+                else:
+                    output_data = augmentation_transforms.apply_policy(
+                        policy=policy[iteration-1],
+                        data=copy.copy(input_data),
+                        image_size=(input_height, input_width),
+                        style_augmentor=style_augmentor
+                    )
+            elif isinstance(policy, list):
+                # policy schedule learning during search or a random single policy
+                output_data = augmentation_transforms.apply_policy(
+                    policy=policy,
+                    data=copy.copy(input_data),
+                    image_size=(input_height, input_width),
+                    style_augmentor=style_augmentor
+                )
+            else:
+                raise ValueError('Unknown policy.')
+    else:
+        # no data augmentation policy applied
+        output_data = copy.copy(input_data)
+
+    tgt_img_aug, src_img_1_aug, src_img_2_aug = output_data['img_data']
+    intrinsic = output_data['intrinsic']
+
+    # convert source image into (B, H, W, 3*2)
+    src_img_stack = np.concatenate((src_img_1, src_img_2), axis=-1)
+    src_img_stack_aug = np.concatenate((src_img_1_aug, src_img_2_aug), axis=-1)
+
+    return tgt_img, src_img_stack, tgt_img_aug, src_img_stack_aug, intrinsic
 
 

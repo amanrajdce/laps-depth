@@ -1,11 +1,12 @@
 #!/bin/bash
 export PYTHONPATH="$(pwd)"
+export COMET_DISABLE_AUTO_LOGGING=1
 
-local_dir="/media/ehdd_2t/amanraj/results/"
-data_root="/media/ehdd_2t/amanraj/data/struct2depth"
+local_dir="/ceph/amanraj/results/"
+data_root="/ceph/amanraj/data"
 
 kitti_root="$data_root/kitti_processed"
-kitti_raw="$data_root/kitti_raw"
+kitti_raw="$data_root/kitti_raw_eigen_test"
 train_file_path="$kitti_root/train.txt"
 test_file_path="$kitti_raw/test_files_eigen.txt"
 gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
