@@ -3,7 +3,8 @@ export PYTHONPATH="$(pwd)"
 
 #kitti_test_name="kitti_raw_eigen_test"
 #kitti_test_name="kitti_raw_eigen_test_weather"
-kitti_test_name="kitti_raw_eigen_test_weather_single"
+kitti_test_name="kitti_raw_eigen_test_weather_double"
+#kitti_test_name="kitti_raw_eigen_test_weather_single"
 
 local_dir="/ceph/amanraj/results"
 data_root="/ceph/amanraj/data"

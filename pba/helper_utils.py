@@ -82,7 +82,7 @@ def compute_predictions(session, model, global_step, test_files, comet_exp=None)
                 break
             # adapt to py3 ref: https://github.com/python-pillow/Pillow/issues/1605
             fh = open(test_files[idx], 'rb')
-            raw_im = pil.open(fh)
+            raw_im = pil.open(fh).convert('RGB')
             scaled_im = raw_im.resize((input_width, input_height), pil.ANTIALIAS)
             inputs[b] = np.array(scaled_im, dtype='float32') / 255.0
 

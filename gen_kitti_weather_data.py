@@ -92,7 +92,8 @@ def main(args):
         apply_x = copy.copy(augmentations)
         random.shuffle(apply_x)
         #count = np.random.choice([0, 1, 2], p=[0.10, 0.45, 0.45])
-        count = np.random.choice([0, 1], p=[0.10, 0.90])
+        count = np.random.choice([0, 2], p=[0.10, 0.90])
+        #count = np.random.choice([0, 1], p=[0.10, 0.90])
         if count != 0:
             for aug_fun in apply_x:
                 img_aug = aug_fun(img_aug, seed=idx)
@@ -135,7 +136,7 @@ def parse_arguments():
     )
     parser.add_argument(
         '--save_dir',
-        default='/ceph/amanraj/data/kitti_raw_eigen_test_weather_single',
+        default='/ceph/amanraj/data/kitti_raw_eigen_test_weather_double',
         help='directory to save generated dataset'
     )
     args = parser.parse_args()
