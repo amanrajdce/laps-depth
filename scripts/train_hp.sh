@@ -15,7 +15,6 @@ train_hp_kitti() {
   gt_path="$data_root/kitti_eigen_gt/gt_depth.npy"
 
   name="train_hp_search-train-5k-t2-max-25q"
-  # hp_policy="$PWD/schedules/rcifar10_16_kitti.txt"
   hp_policy="$local_dir/search_train_5k_t2_max_25q_mono2/pbt_policy_00001.txt"
   restore="$local_dir/train_hp_search-train-5k-t2-max-25q/policy1_run4/checkpoint_28/model.ckpt-28"
 
