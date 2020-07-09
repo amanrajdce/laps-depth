@@ -31,14 +31,14 @@ class RayModel(Trainable):
         if self.hparams.disable_comet:
             tf.logging.info("Started logging offline for comet ml")
             self.comet_experiment = OfflineExperiment(
-                project_name=self.hparams.name, workspace="amanraj42",
+                project_name=self.hparams.name, workspace="new",
                 offline_directory=os.path.join(self.hparams.local_dir, self.hparams.name)
             )
         else:
             tf.logging.info("Started logging to comet ml online")
             self.comet_experiment = Experiment(
-                api_key="1M6vRcdzjgqClytApluyGXhTP",
-                project_name=self.hparams.name, workspace="amanraj42"
+                api_key="enter_your_api_key_from_cometml",
+                project_name=self.hparams.name, workspace="new"
             )
 
         self.trainer = ModelTrainer(self.hparams, comet_exp=self.comet_experiment)
