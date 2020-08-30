@@ -45,3 +45,6 @@ For validation we use KITTI eigen test set which is provided in ```data/test_fil
 
 ## Result
 ![result](data/real_weather_example.png "Prediction results on real world weather images")
+
+## Acknowledgement
+This code is based on the excellent repo by PBA folks at: https://github.com/arcelien/pba
