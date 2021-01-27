@@ -47,8 +47,9 @@ For validation we use KITTI eigen test set which is provided in ```data/test_fil
 ![result](data/real_weather_example.png "Prediction results on real world weather images")
 
 ## Citation
-If you use this work in your research, please cite:
-Raj, A. (2020). Learning Augmentation Policy Schedules for Unsuperivsed Depth Estimation. UC San Diego. ProQuest ID: Raj_ucsd_0033M_19587. 
+If you use this work in your research, please cite: <br>
+
+Raj, A. (2020). Learning Augmentation Policy Schedules for Unsuperivsed Depth Estimation. UC San Diego. ProQuest ID: Raj_ucsd_0033M_19587. <br>
 Merritt ID: ark:/13030/m5ns636d. Retrieved from https://escholarship.org/uc/item/1p85x50q
 
 ## Acknowledgement
