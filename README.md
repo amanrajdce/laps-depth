@@ -49,8 +49,7 @@ For validation we use KITTI eigen test set which is provided in ```data/test_fil
 ## Citation
 If you use this work in your research, please cite: <br>
 
-Raj, A. (2020). Learning Augmentation Policy Schedules for Unsuperivsed Depth Estimation. UC San Diego. ProQuest ID: Raj_ucsd_0033M_19587. <br>
-Merritt ID: ark:/13030/m5ns636d. Retrieved from https://escholarship.org/uc/item/1p85x50q
+Raj, A. (2020). Learning Augmentation Policy Schedules for Unsuperivsed Depth Estimation. UC San Diego. ProQuest ID: Raj_ucsd_0033M_19587. Merritt ID: ark:/13030/m5ns636d. Retrieved from https://escholarship.org/uc/item/1p85x50q
 
 ## Acknowledgement
 This code is based on the excellent repo by PBA folks at: https://github.com/arcelien/pba
